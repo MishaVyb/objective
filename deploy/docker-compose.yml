@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: ./deploy/Dockerfile
+      target: prod
+    image: objective:${OBJECTIVE_VERSION:-latest}
+    restart: always
+    env_file:
+    - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      OBJECTIVE_HOST: 0.0.0.0
+      OBJECTIVE_DB_HOST: objective-db
+      OBJECTIVE_DB_PORT: 5432
+      OBJECTIVE_DB_USER: objective
+      OBJECTIVE_DB_PASS: objective
+      OBJECTIVE_DB_BASE: objective
+
+  db:
+    image: postgres:13.8-bullseye
+    hostname: objective-db
+    environment:
+      POSTGRES_PASSWORD: "objective"
+      POSTGRES_USER: "objective"
+      POSTGRES_DB: "objective"
+    volumes:
+    - objective-db-data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: pg_isready -U objective
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  migrator:
+    image: objective:${OBJECTIVE_VERSION:-latest}
+    restart: "no"
+    command: alembic upgrade head
+    environment:
+      OBJECTIVE_DB_HOST: objective-db
+      OBJECTIVE_DB_PORT: 5432
+      OBJECTIVE_DB_USER: objective
+      OBJECTIVE_DB_PASS: objective
+      OBJECTIVE_DB_BASE: objective
+    depends_on:
+      db:
+        condition: service_healthy
+
+
+
+volumes:
+  objective-db-data:
+    name: objective-db-data
