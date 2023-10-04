@@ -71,7 +71,7 @@ env = [
     "OBJECTIVE_DB_BASE=objective_test",
 ]
 
-[fastapi-template.options]
+[tool.fastapi-template.options]
 project_name = "objective"
 api_type = "rest"
 enable_redis = "None"
