@@ -13,5 +13,4 @@ async def get_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]
     """
     engine: AsyncEngine = request.app.state.db_engine
     async with AsyncSession(engine, expire_on_commit=False) as session:
-        async with session.begin():
-            yield session
+        yield session
