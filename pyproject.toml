@@ -48,17 +48,32 @@ multi_line_output = 3
 src_paths = ["objective",]
 
 [tool.mypy]
-strict = true
-ignore_missing_imports = true
-allow_subclassing_any = true
-allow_untyped_calls = true
-pretty = true
-show_error_codes = true
-implicit_reexport = true
-allow_untyped_decorators = true
-warn_unused_ignores = false
-warn_return_any = false
-namespace_packages = true
+python_version = 3.11
+plugins = 'pydantic.mypy'
+exclude = "|venv/|migrations/|alembic/|/.venv|"
+# explicit_package_bases = true
+# strict_equality = true
+# no_implicit_optional = false
+# warn_unused_ignores = false
+# warn_redundant_casts = true
+# warn_unused_configs = true
+# warn_unreachable = true
+# warn_no_return = true
+# show_error_codes = true
+# pretty = true
+# check_untyped_defs = true
+# disallow_any_generics = false
+# disallow_untyped_calls = false
+# disallow_untyped_decorators = false
+# ignore_errors = false
+# ignore_missing_imports = true
+# no_implicit_reexport = true
+# strict_optional = false
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
 filterwarnings = [

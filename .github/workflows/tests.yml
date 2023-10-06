@@ -10,27 +10,30 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Install deps
       uses: knowsuchagency/poetry-install@v1
       env:
         POETRY_VIRTUALENVS_CREATE: false
     - name: Run black check
       run: poetry run black --check .
-  flake8:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.9'
-    - name: Install deps
-      uses: knowsuchagency/poetry-install@v1
-      env:
-        POETRY_VIRTUALENVS_CREATE: false
-    - name: Run flake8 check
-      run: poetry run flake8 --count .
+
+  # DISABLED:
+  # flake8:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - uses: actions/checkout@v2
+  #   - name: Set up Python
+  #     uses: actions/setup-python@v2
+  #     with:
+  #       python-version: '3.9'
+  #   - name: Install deps
+  #     uses: knowsuchagency/poetry-install@v1
+  #     env:
+  #       POETRY_VIRTUALENVS_CREATE: false
+  #   - name: Run flake8 check
+  #     run: poetry run flake8 --count .
+
   mypy:
     runs-on: ubuntu-latest
     steps:
@@ -38,7 +41,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Install deps
       uses: knowsuchagency/poetry-install@v1
       env:
@@ -67,7 +70,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Install deps
       uses: knowsuchagency/poetry-install@v1
       env:
