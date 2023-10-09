@@ -1,23 +1,12 @@
-import enum
-import os
+import logging
 from pathlib import Path
 from tempfile import gettempdir
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from yarl import URL
+from sqlalchemy import URL
 
 TEMP_DIR = Path(gettempdir())
-
-
-class LogLevel(str, enum.Enum):  # noqa: WPS600
-    """Possible log levels."""
-
-    NOTSET = "NOTSET"
-    DEBUG = "DEBUG"
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
-    FATAL = "FATAL"
 
 
 class Settings(BaseSettings):
@@ -30,16 +19,12 @@ class Settings(BaseSettings):
 
     host: str = "127.0.0.1"
     port: int = 8000
-    # quantity of workers for uvicorn
-    workers_count: int = 1
-    # Enable uvicorn reloading
-    reload: bool = False
-
-    # Current environment
+    workers_count: int = 1  # quantity of workers for uvicorn
+    reload: bool = False  # Enable uvicorn reloading
     environment: str = "dev"
+    log_level: str | int = logging.DEBUG
+    users_secret: SecretStr = Field(min_length=10)
 
-    log_level: LogLevel = LogLevel.INFO
-    users_secret: str = os.getenv("USERS_SECRET", "")
     # Variables for the database
     db_host: str = "localhost"
     db_port: int = 5432
@@ -49,19 +34,14 @@ class Settings(BaseSettings):
     db_echo: bool = False
 
     @property
-    def db_url(self) -> URL:
-        """
-        Assemble database URL from settings.
-
-        :return: database URL.
-        """
-        return URL.build(
-            scheme="postgresql+asyncpg",
+    def db_url(self):
+        return URL.create(
+            drivername="postgresql+asyncpg",
             host=self.db_host,
             port=self.db_port,
-            user=self.db_user,
+            username=self.db_user,
             password=self.db_pass,
-            path=f"/{self.db_base}",
+            database=self.db_base,
         )
 
     model_config = SettingsConfigDict(
@@ -71,4 +51,5 @@ class Settings(BaseSettings):
     )
 
 
+logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.DEBUG)
 settings = Settings()

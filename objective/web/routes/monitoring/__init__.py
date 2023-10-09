@@ -1,4 +1,4 @@
 """API for checking project status."""
-from objective.web.api.monitoring.views import router
+from objective.web.routes.monitoring.routes import router
 
 __all__ = ["router"]

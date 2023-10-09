@@ -1,10 +1,7 @@
 from fastapi import APIRouter
 
-from objective.db.models.users import UserCreate  # type: ignore
-from objective.db.models.users import UserRead  # type: ignore
-from objective.db.models.users import UserUpdate  # type: ignore
-from objective.db.models.users import api_users  # type: ignore
-from objective.db.models.users import auth_jwt  # type: ignore
+from objective.schemas.users import UserCreate, UserRead, UserUpdate
+from objective.web.dependencies import api_users, auth_jwt
 
 router = APIRouter()
 
