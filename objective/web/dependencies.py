@@ -17,7 +17,9 @@ from objective.db.models.users import UserModel
 from objective.settings import settings
 
 if TYPE_CHECKING:
-    pass
+    from sqlalchemy.orm import Session
+
+    Session
 
 
 async def get_db_session(request: Request):

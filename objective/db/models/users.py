@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from objective.db.base import Base
 
@@ -22,10 +22,10 @@ class UserModel(SQLAlchemyBaseUserTableUUID, Base):
     )
 
     # extra info:
-    username: Mapped[str]
+    username: Mapped[str | None]
     role: Mapped[str | None]
-    """1AD / DP / Director ..."""
 
-    # relationships:
-    scenes: Mapped[SceneModel] = relationship("SceneModel", back_populates="user")
-    projects: Mapped[ProjectModel] = relationship("ProjectModel", back_populates="user")
+    # relationships (postponed definition)
+    if TYPE_CHECKING:
+        projects: Mapped[ProjectModel]
+        scenes: Mapped[SceneModel]

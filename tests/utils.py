@@ -1,10 +1,22 @@
+from json import JSONDecodeError
+from pprint import pformat
 from typing import Any
 
+from httpx import Response
 from sqlalchemy import Select, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import ClauseElement, Executable
+
+
+def verbose(obj: Any):
+    if isinstance(obj, Response):
+        try:
+            body = obj.json()
+        except JSONDecodeError:
+            body = obj.text
+        return repr(obj) + pformat(body)
 
 
 def quote(clause: Any):

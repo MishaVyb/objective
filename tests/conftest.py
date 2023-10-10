@@ -12,9 +12,11 @@ from fastapi import FastAPI, Request
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from starlette import status
 from tests.utils import async_create_database, async_drop_database
 
 from objective.db.meta import meta
+from objective.db.models.users import UserModel
 from objective.settings import Settings
 from objective.settings import settings as app_settings
 from objective.web.application import get_app
@@ -67,8 +69,25 @@ async def app():
 
 
 @pytest.fixture
-async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
+async def not_auth_client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(app=app, base_url="http://test") as client:
+        yield client
+
+
+@pytest.fixture
+async def client(not_auth_client: AsyncClient, app: FastAPI, user: UserModel):
+    response = await not_auth_client.post(
+        "/api/auth/jwt/login",
+        data=dict(username="user@example.com", password="string"),
+    )
+    assert response.status_code == status.HTTP_200_OK, response.text
+
+    token = response.json()["access_token"]
+    async with AsyncClient(
+        app=app,
+        base_url="http://test",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as client:
         yield client
 
 

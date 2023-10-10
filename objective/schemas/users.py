@@ -2,14 +2,21 @@ import uuid
 
 from fastapi_users import schemas
 
-
-class UserRead(schemas.BaseUser[uuid.UUID]):
-    """Represents a read command for a user."""
+from objective.schemas.base import BaseSchema
 
 
-class UserCreate(schemas.BaseUserCreate):
-    """Represents a create command for a user."""
+class UserMixinSchema(BaseSchema):
+    username: str | None
+    role: str | None
 
 
-class UserUpdate(schemas.BaseUserUpdate):
-    """Represents an update command for a user."""
+class UserReadSchema(schemas.BaseUser[uuid.UUID], UserMixinSchema):
+    pass
+
+
+class UserCreateSchema(schemas.BaseUserCreate, UserMixinSchema):
+    pass
+
+
+class UserUpdateSchema(schemas.BaseUserUpdate, UserMixinSchema):
+    pass

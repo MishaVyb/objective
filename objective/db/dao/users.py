@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
 
+from fastapi import Request
 from fastapi_users import BaseUserManager, UUIDIDMixin
 from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi_users.password import PasswordHelperProtocol
 
 from objective.db.models.users import UserModel
 from objective.settings import settings
-
-if TYPE_CHECKING:
-    pass
 
 
 class UserRepository(SQLAlchemyUserDatabase):
@@ -22,3 +20,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[UserModel, uuid.UUID]):
 
     reset_password_token_secret = settings.users_secret
     verification_token_secret = settings.users_secret
+
+    user_db: SQLAlchemyUserDatabase
+
+    def __init__(
+        self,
+        user_db: SQLAlchemyUserDatabase,
+        password_helper: PasswordHelperProtocol | None = None,
+    ):
+        super().__init__(user_db, password_helper)
+
+    async def on_after_register(self, user: UserModel, request: Request | None = None):
+
+        from objective.db.dao.scenes import ProjectRepository  # FIXME
+
+        self.project_dao = ProjectRepository(user, self.user_db.session)
+        return await self.project_dao.create_default()
