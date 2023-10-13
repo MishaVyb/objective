@@ -44,7 +44,7 @@ repos:
     language: system
     types: [python]
 
-  # DISABLED:
+  # DISABLED: black does all we need
   # - id: flake8
   #   name: Check with Flake8
   #   entry: poetry run flake8
@@ -53,11 +53,12 @@ repos:
   #   types: [python]
   #   args: [--count, .]
 
-  - id: mypy
-    name: Validate types with MyPy
-    entry: poetry run mypy
-    language: system
-    types: [python]
-    pass_filenames: false
-    args:
-    - "objective"
+  # DISABLED: check on GitHub Actions (allows local commits before pushing without mypy)
+  # - id: mypy
+  #   name: Validate types with MyPy
+  #   entry: poetry run mypy
+  #   language: system
+  #   types: [python]
+  #   pass_filenames: false
+  #   args:
+  #   - "objective"

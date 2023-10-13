@@ -1,8 +1,8 @@
 import asyncio
 import logging
-import uuid
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from datetime import datetime
+from typing import AsyncGenerator, Literal
 
 import alembic
 import pytest
@@ -10,6 +10,7 @@ from alembic.config import Config as AlembicConfig
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI, Request
 from httpx import AsyncClient
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from starlette import status
@@ -27,11 +28,22 @@ logger = logging.getLogger(__name__)
 
 class TestSettings(Settings):
     """
-    Extend application settings with any other configuration for tests runnings.
-    File `.env` will be overridden by `test.env` if exists.
+    Extend application settings with any other configuration for tests runnings. Usage::
+
+        > PYTEST_CREATE_TABLES_BY_METADATA=True pytest -v
+        > PYTEST_DROP_TEST_DATABASES_ON_TEARDOWN=False pytest -v
     """
 
+    environment: Literal["pytest"] = "pytest"
+
     create_tables_by_metadata: bool = False
+    drop_test_databases_on_teardown: bool = True
+
+    model_config = SettingsConfigDict(
+        env_file=".env",  # Along side with tool.pytest.ini_options::env
+        env_prefix="PYTEST_",
+        env_file_encoding="utf-8",
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +60,7 @@ def anyio_backend():
 
 @pytest.fixture(scope="session")
 def settings():
-    return TestSettings(db_base=f"pytest_{uuid.uuid4()}", environment="test")
+    return TestSettings(db_base=f"pytest_{datetime.now()}")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -56,8 +68,9 @@ def patch_settings(settings: TestSettings):
     logger.debug(f"Test session runs with: {settings!r}")
 
     with pytest.MonkeyPatch.context() as monkeypatch:
-        for field in app_settings.model_fields_set:
-            monkeypatch.setattr(app_settings, field, getattr(settings, field))
+        for field in settings.model_fields_set:
+            if hasattr(app_settings, field):
+                monkeypatch.setattr(app_settings, field, getattr(settings, field))
         yield
 
 
@@ -99,7 +112,7 @@ def engine(settings: TestSettings, app: FastAPI):
 
 
 @pytest.fixture(scope="session")
-async def setup_database(settings: Settings):
+async def setup_database(settings: TestSettings):
     """
     Create test database. Fixture with async implementation of sqlalchemy_utils methods.
     """
@@ -109,6 +122,9 @@ async def setup_database(settings: Settings):
     logger.debug(f"Successfully set up test database: {engine.url}. ")
 
     yield
+
+    if not settings.drop_test_databases_on_teardown:
+        return
 
     logger.debug("Tear down all test databases. ")
     async with engine.begin() as conn:
