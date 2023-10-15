@@ -32,7 +32,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[UserModel, uuid.UUID]):
 
     async def on_after_register(self, user: UserModel, request: Request | None = None):
 
-        from objective.db.dao.scenes import ProjectRepository  # FIXME
+        from objective.db.dao.projects import ProjectRepository  # FIXME
 
         self.project_dao = ProjectRepository(user, self.user_db.session)
         return await self.project_dao.create_default()

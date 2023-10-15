@@ -1,16 +1,18 @@
+import uuid
 from pprint import pprint
 
 import pytest
 from httpx import AsyncClient
 from starlette import status
+from tests.conftest import ClientsFixture
 from tests.utils import verbose
 
-from objective.db.dao.scenes import ProjectRepository
-from objective.schemas.scenes import ProjectCreateSchema, ProjectUpdateSchema
+from objective.db.dao.projects import ProjectRepository
+from objective.schemas.projects import ProjectCreateSchema, ProjectUpdateSchema
 
 pytestmark = [
     pytest.mark.anyio,
-    pytest.mark.usefixtures("session", "user"),
+    pytest.mark.usefixtures("session"),
 ]
 
 
@@ -23,15 +25,6 @@ async def test_default_project(client: AsyncClient) -> None:
     pprint(json)
     assert len(json) == 1
     assert json[0]["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
-
-    # [2] get
-    id = json[0]["id"]
-    response = await client.get(f"/api/projects/{id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-
-    json = response.json()
-    pprint(json)
-    assert json["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
 
 
 async def test_project_crud(client: AsyncClient) -> None:
@@ -52,6 +45,13 @@ async def test_project_crud(client: AsyncClient) -> None:
     json = response.json()
     pprint(json)
     assert len(json) == 2  # default and new one
+
+    # [2.1] read by id
+    response = await client.get(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+
+    json = response.json()
+    pprint(json)
 
     # [3] update
     response = await client.patch(
@@ -91,9 +91,28 @@ async def test_project_crud(client: AsyncClient) -> None:
     assert json[0]["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
 
 
-async def test_project_access_rights():
-    pass
+async def test_project_404(clients: ClientsFixture):
+    response = await clients.user.get(f"/api/projects/{uuid.uuid4()}")
+    assert response.status_code == status.HTTP_404_NOT_FOUND, verbose(response)
 
 
-async def test_project_raises():
-    pass
+async def test_project_403(clients: ClientsFixture):
+    # someone else's project id:
+    id = (await clients.another_user.get("/api/projects")).json()[0]["id"]
+
+    # read
+    response = await clients.user.get(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
+
+    # update
+    response = await clients.user.patch(f"/api/projects/{id}", json={"name": "name"})
+    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
+
+    # delete
+    response = await clients.user.delete(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
+
+
+async def test_project_401(clients: ClientsFixture):
+    response = await clients.no_auth.get(f"/api/projects/{uuid.uuid4()}")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED, verbose(response)

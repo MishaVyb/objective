@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from uuid import UUID
+
 from objective.schemas.base import (
     BaseCreateSchema,
     BaseReadSchema,
@@ -6,18 +10,30 @@ from objective.schemas.base import (
 )
 
 
-class ProjectBaseSchema(BaseSchema):
+class SceneBaseSchema(BaseSchema):
+    project_id: UUID
     name: str
 
 
-class ProjectCreateSchema(ProjectBaseSchema, BaseCreateSchema):
+class SceneCreateSchema(SceneBaseSchema, BaseCreateSchema):
     pass
 
 
-class ProjectUpdateSchema(ProjectBaseSchema, BaseUpdateSchema):
+class SceneUpdateSchema(SceneBaseSchema, BaseUpdateSchema):
     pass
 
 
-class ProjectReadSchema(ProjectBaseSchema, BaseReadSchema):
-    ...
-    # scenes: list[UUID] # TODO as list[SceneReadSimplifiedSchema]
+class SceneReadSimplifiedSchema(SceneBaseSchema, BaseReadSchema):
+    pass
+
+
+class SceneReadSchema(SceneBaseSchema, BaseReadSchema):
+
+    # scene data:
+    type: str | None
+    version: int | None
+    source: str | None
+    elements: list
+    app_state: dict
+
+    # files: list # TODO

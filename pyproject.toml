@@ -70,7 +70,7 @@ plugins = 'pydantic.mypy'
 # ignore_errors = false
 # ignore_missing_imports = true
 # no_implicit_reexport = true
-# strict_optional = false
+strict_optional = false
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

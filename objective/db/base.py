@@ -1,11 +1,10 @@
-import uuid
-from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Type
 
-from sqlalchemy import JSON, ForeignKey, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import JSON
+from sqlalchemy.orm import DeclarativeBase, QueryableAttribute
 
 from objective.db.meta import meta
+from objective.schemas.base import BaseSchema
 
 
 class Base(DeclarativeBase):
@@ -17,29 +16,9 @@ class Base(DeclarativeBase):
         list: JSON,
     }
 
-
-class BaseModelFieldsMixin:
-
-    if TYPE_CHECKING:
-
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True,
-        server_default=func.uuid_generate_v4(),
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=func.current_timestamp(),
-    )
-    updated_at: Mapped[datetime | None] = mapped_column(
-        onupdate=func.current_timestamp(),
-    )
-    """Resolve simultaneously updates. """
-    updated_by: Mapped[uuid.UUID | None]
-    """Supports collab mode. """
-    is_deleted: Mapped[bool] = mapped_column(default=False)
-    """Supports deleting for client, but archive on backend. """
-
-    # relations:
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"))
+    @classmethod
+    def columns_depending_on(
+        cls,
+        reference_scheme: Type[BaseSchema],
+    ) -> list[QueryableAttribute]:
+        return [getattr(cls, fieldname) for fieldname in reference_scheme.model_fields]
