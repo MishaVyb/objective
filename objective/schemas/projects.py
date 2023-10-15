@@ -4,7 +4,7 @@ from objective.schemas.base import (
     BaseSchema,
     BaseUpdateSchema,
 )
-from objective.schemas.scenes import SceneReadSimplifiedSchema
+from objective.schemas.scenes import SceneSimplifiedReadSchema
 
 
 class ProjectBaseSchema(BaseSchema):
@@ -20,7 +20,7 @@ class ProjectUpdateSchema(ProjectBaseSchema, BaseUpdateSchema):
 
 
 class ProjectReadSchema(ProjectBaseSchema, BaseReadSchema):
-    scenes: list[SceneReadSimplifiedSchema] | None  # TODO default []
+    scenes: list[SceneSimplifiedReadSchema] | None  # TODO default ?
 
 
 class SceneBaseSchema(BaseSchema):

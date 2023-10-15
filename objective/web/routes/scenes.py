@@ -7,15 +7,15 @@ from starlette import status
 from objective.db.dao.scenes import SceneFilters, SceneRepository
 from objective.schemas.scenes import (
     SceneCreateSchema,
-    SceneReadSchema,
-    SceneReadSimplifiedSchema,
+    SceneExtendedReadSchema,
+    SceneSimplifiedReadSchema,
     SceneUpdateSchema,
 )
 
 router = APIRouter()
 
 
-@router.get("/scenes", response_model=list[SceneReadSimplifiedSchema])
+@router.get("/scenes", response_model=list[SceneSimplifiedReadSchema])
 async def get_scenes(
     filters: Annotated[SceneFilters, Depends()],
     dao: Annotated[SceneRepository, Depends()],
@@ -24,7 +24,7 @@ async def get_scenes(
     return await dao.get_many(filters)
 
 
-@router.get("/scenes/{id}", response_model=SceneReadSchema)
+@router.get("/scenes/{id}", response_model=SceneExtendedReadSchema)
 async def get_scene(
     id: UUID,
     dao: Annotated[SceneRepository, Depends()],
@@ -34,7 +34,7 @@ async def get_scene(
 
 @router.post(
     "/scenes",
-    response_model=SceneReadSchema,
+    response_model=SceneExtendedReadSchema,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_scene(
@@ -46,8 +46,8 @@ async def create_scene(
 
 @router.patch(
     "/scenes/{id}",
-    response_model=SceneReadSchema,
     status_code=status.HTTP_200_OK,
+    response_model=SceneExtendedReadSchema,
 )
 async def update_scene(
     id: UUID,
@@ -59,7 +59,7 @@ async def update_scene(
 
 @router.delete(
     "/scenes/{id}",
-    response_model=SceneReadSchema,
+    response_model=SceneExtendedReadSchema,
     status_code=status.HTTP_200_OK,
 )
 async def delete_scene(

@@ -54,8 +54,15 @@ class TestSettings(Settings):
     )
 
 
-@pytest.fixture(autouse=True)
-def new_line():
+@pytest.fixture(autouse=True, scope="session")
+def new_line_session():
+    print()
+    yield
+    print()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def new_line_test():
     print()
     yield
     print()

@@ -1,11 +1,11 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class BaseSchema(BaseModel):
-    pass
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class BaseCreateSchema(BaseModel):

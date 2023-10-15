@@ -4,7 +4,7 @@ from fastapi import HTTPException
 
 
 class NotFoundError(HTTPException):
-    message = "Not found. "
+    message = "Not Found. "
 
     def __init__(
         self,
@@ -26,7 +26,7 @@ class ForbiddenError(HTTPException):
 
 
 class NotAuthorizedError(HTTPException):
-    message = "Not authorized. "
+    message = "Not Authorized. "
 
     def __init__(
         self,

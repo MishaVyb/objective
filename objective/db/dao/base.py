@@ -1,8 +1,10 @@
+import logging
 from dataclasses import dataclass, fields
 from typing import Annotated, Generic, Literal, Type, TypeVar
 from uuid import UUID
 
 from fastapi import Depends
+from pydantic import BaseModel
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.strategy_options import _AbstractLoad
@@ -17,6 +19,8 @@ _TModel = TypeVar("_TModel", bound=BaseFieldsMixin)
 _SchemaCreate = TypeVar("_SchemaCreate", bound=BaseSchema)
 _SchemaUpdate = TypeVar("_SchemaUpdate", bound=BaseSchema)
 _TSelect = TypeVar("_TSelect", bound=tuple)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -61,8 +65,10 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
             options=self.options_one or self.options_many,
         )
         if not instance:
+            logger.warning(f"Not Found: {id}")
             raise NotFoundError()
         if not self._has_access_rights(instance):
+            logger.warning(f"Access Denied: {id}")
             raise ForbiddenError()
         return instance
 
@@ -76,11 +82,10 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         )
         if extra_filters:
             q = extra_filters.emit(q)
-        r = await self.session.execute(q)
+        q = q.order_by(self.model.created_at)
 
-        # TODO order
-
-        return r.scalars().all()
+        r = await self.session.scalars(q)
+        return r.all()
 
     async def create(self, schema: _SchemaCreate, **extra_values):
         project = self.model(**dict(schema), **extra_values, user_id=self.user.id)
@@ -91,7 +96,12 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
     async def update(self, id: UUID, schema: _SchemaUpdate | dict):
         obj = await self.get_one(id)
 
-        data = dict(schema, updated_by=self.user.id)
+        data = dict(updated_by=self.user.id)
+        if isinstance(schema, BaseModel):
+            data |= schema.model_dump(exclude_unset=True, exclude_defaults=True)
+        else:
+            data |= schema
+
         for fieldname, value in data.items():
             setattr(obj, fieldname, value)
 

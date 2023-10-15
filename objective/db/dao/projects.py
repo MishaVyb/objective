@@ -7,7 +7,7 @@ from objective.db.models.scenes import ProjectModel, SceneModel
 from objective.schemas.projects import (
     ProjectCreateSchema,
     ProjectUpdateSchema,
-    SceneReadSimplifiedSchema,
+    SceneSimplifiedReadSchema,
 )
 
 
@@ -22,7 +22,7 @@ class ProjectRepository(
     model = ProjectModel
     options_many = [
         selectinload(ProjectModel.scenes).load_only(
-            *SceneModel.columns_depending_on(SceneReadSimplifiedSchema), raiseload=True
+            *SceneModel.columns_depending_on(SceneSimplifiedReadSchema), raiseload=True
         ),
     ]
 
