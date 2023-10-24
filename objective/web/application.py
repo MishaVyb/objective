@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from importlib import metadata
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import UJSONResponse
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -25,6 +26,14 @@ def get_app() -> FastAPI:
         version=metadata.version("objective"),
         default_response_class=UJSONResponse,
         lifespan=lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     app.include_router(router=api_router, prefix="/api")
