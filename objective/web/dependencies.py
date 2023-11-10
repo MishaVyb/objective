@@ -39,7 +39,7 @@ async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db
 def get_jwt_strategy():
     return JWTStrategy(
         secret=settings.users_secret.get_secret_value(),
-        lifetime_seconds=3600,
+        lifetime_seconds=3600 * 24 * 7,  # 7 days
     )
 
 
