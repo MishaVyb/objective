@@ -16,6 +16,8 @@ from objective.schemas.base import (
 # NOTE
 # Scene is allowed to be updated PARTIALLY, so there are all fields are optional
 class SceneBaseSchema(BaseSchema):
+    # TODO validate: project_id belongs to user
+    project_id: UUID | None = None  # update that means move to another project
     name: str | None = None
 
 
@@ -27,8 +29,8 @@ class SceneExtendedSchema(SceneBaseSchema):
     app_state: Any | None = Field(default=None, alias="appState")
 
 
-class SceneCreateSchema(SceneBaseSchema, BaseCreateSchema):
-    project_id: UUID
+class SceneCreateSchema(SceneExtendedSchema, BaseCreateSchema):
+    project_id: UUID  # required
 
 
 class SceneUpdateSchema(SceneExtendedSchema, BaseUpdateSchema):

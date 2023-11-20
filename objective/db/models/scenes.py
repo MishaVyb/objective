@@ -54,6 +54,7 @@ class ProjectModel(Base, BaseFieldsMixin):
     scenes: Mapped[list[SceneModel]] = relationship(
         "SceneModel",
         back_populates="project",
+        order_by="SceneModel.created_at",
     )
 
 

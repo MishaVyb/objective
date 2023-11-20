@@ -34,6 +34,8 @@ class ProjectRepository(
             schema,
             **extra_values,
             scenes=[
+                # TODO create Scene only for 1st Default Project
+                # TODO create Template Scene (not empty)
                 # default Scene for every new Project:
                 SceneModel(name=self.DEFAULT_SCENE_NAME, user_id=self.user.id),
             ]
