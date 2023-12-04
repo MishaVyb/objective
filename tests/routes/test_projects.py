@@ -101,8 +101,9 @@ async def test_project_403(clients: ClientsFixture):
     id = (await clients.another_user.get("/api/projects")).json()[0]["id"]
 
     # read
+    # TMP anyone has read access to anything
     response = await clients.user.get(f"/api/projects/{id}")
-    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
 
     # update
     response = await clients.user.patch(f"/api/projects/{id}", json={"name": "name"})

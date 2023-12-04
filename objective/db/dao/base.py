@@ -22,6 +22,8 @@ _TSelect = TypeVar("_TSelect", bound=tuple)
 
 logger = logging.getLogger(__name__)
 
+Action = Literal["create", "read", "update", "delete"]
+
 
 @dataclass
 class FiltersBase:
@@ -53,12 +55,14 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         """Current user. """
         self.session = session
 
-    def _has_access_rights(
-        self, obj: _TModel, *, action: Literal["read", "write", "any"] = None
-    ):
+    def _has_access_rights(self, obj: _TModel, *, action: Action):
+        if action == "read":
+            # TMP anyone has read access to anything
+            return True
+
         return obj.user_id == self.user.id
 
-    async def get_one(self, id: UUID):
+    async def get_one(self, id: UUID, *, action: Action = "read"):
         instance = await self.session.get(
             self.model,
             id,
@@ -67,12 +71,16 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         if not instance:
             logger.warning(f"Not Found: {id}")
             raise NotFoundError()
-        if not self._has_access_rights(instance):
+        if not self._has_access_rights(instance, action=action):
             logger.warning(f"Access Denied: {id}")
             raise ForbiddenError()
         return instance
 
-    async def get_many(self, extra_filters: FiltersBase = None):
+    async def get_many(
+        self,
+        extra_filters: FiltersBase = None,
+        action: Action = "read",
+    ):
         """Get many entities. Filtered by current user."""
 
         q = (
@@ -85,7 +93,14 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         q = q.order_by(self.model.created_at)
 
         r = await self.session.scalars(q)
-        return r.all()
+        items = r.all()
+
+        for item in items:
+            if not self._has_access_rights(item, action=action):
+                logger.warning(f"Access Denied: {item.id}")
+                raise ForbiddenError()
+
+        return items
 
     async def create(self, schema: _SchemaCreate, **extra_values):
         project = self.model(**dict(schema), **extra_values, user_id=self.user.id)
@@ -94,7 +109,7 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         return project
 
     async def update(self, id: UUID, schema: _SchemaUpdate | dict):
-        obj = await self.get_one(id)
+        obj = await self.get_one(id, action="update")
 
         data = dict(updated_by=self.user.id)
         if isinstance(schema, BaseModel):

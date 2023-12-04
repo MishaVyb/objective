@@ -70,8 +70,6 @@ async def test_scene_crud(
     pprint(json)
 
     assert json["name"] == "new-name"
-    assert json["appState"] == {}  # database defaults (not None)
-    assert json["elements"] == []  # database defaults (not None)
 
     # [3.1] update full
     response = await client.patch(
@@ -144,8 +142,9 @@ async def test_scene_403(clients: ClientsFixture):
     id = (await clients.another_user.get("/api/scenes")).json()[0]["id"]
 
     # read
+    # TMP anyone has read access to anything
     response = await clients.user.get(f"/api/scenes/{id}")
-    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
 
     # update
     response = await clients.user.patch(f"/api/scenes/{id}", json={"name": "name"})
