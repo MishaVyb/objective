@@ -1,5 +1,4 @@
 import uuid
-from typing import TYPE_CHECKING
 
 from fastapi import Depends
 from fastapi_users import FastAPIUsers
@@ -15,11 +14,6 @@ from starlette.requests import Request
 from objective.db.dao.users import UserManager, UserRepository
 from objective.db.models.users import UserModel
 from objective.settings import settings
-
-if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
-
-    Session
 
 
 async def get_db_session(request: Request):
