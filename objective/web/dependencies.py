@@ -19,6 +19,9 @@ from objective.settings import settings
 async def get_db_session(request: Request):
     engine: AsyncEngine = request.app.state.db_engine
     async with AsyncSession(engine, expire_on_commit=False) as session:
+        # NOTE:
+        # no session.begins() with autocommit, because `fastapi_users` implements
+        # `session.commit` explicit call
         yield session
 
 

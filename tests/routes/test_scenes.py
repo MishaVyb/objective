@@ -158,3 +158,51 @@ async def test_scene_403(clients: ClientsFixture):
 async def test_scene_401(clients: ClientsFixture):
     response = await clients.no_auth.get(f"/api/scenes/{uuid.uuid4()}")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED, verbose(response)
+
+
+# TODO test create scene add file read file delete file
+
+
+async def test_files_crud(user: UserModel, client: AsyncClient) -> None:
+    project_id = user.projects[0].id
+
+    # [1] create scene
+    response = await client.post(
+        "/api/scenes",
+        content=SceneCreateSchema(
+            name="test-scene",
+            project_id=project_id,
+        ).model_dump_json(),
+    )
+    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
+    json = response.json()
+    pprint(json)
+    scene_id = json["id"]
+
+    # [2] create file
+    file_id = "file-id"
+    response = await client.post(
+        f"/api/scenes/{scene_id}/files",
+        json={"id": "file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
+    )
+    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
+    json = response.json()
+    pprint(json)
+
+    assert json == {"id": "file-id", "mimeType": "mimeType"}
+
+    # [3] read at scene
+    response = await client.get(f"/api/scenes/{scene_id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+
+    json = response.json()
+    pprint(json)
+    assert json["files"] == [{"id": "file-id", "mimeType": "mimeType"}]
+
+    # [3.1] read directly
+    response = await client.get(f"/api/scenes/{scene_id}/files/{file_id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+
+    json = response.json()
+    pprint(json)
+    assert json == {"id": "file-id", "mimeType": "mimeType", "dataURL": "dataURL"}

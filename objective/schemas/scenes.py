@@ -13,6 +13,28 @@ from objective.schemas.base import (
 )
 
 
+class FileBaseSchema(BaseSchema):
+    # id - not needed, using `file_id` for get / post requests
+    file_id: str = Field(
+        description="Excalidraw file id",
+        validation_alias="file_id",  # from database
+        serialization_alias="id",  # to Excalidraw
+    )
+    type: str = Field(alias="mimeType")
+
+
+class FileExtendedSchema(FileBaseSchema):
+    data: str = Field(alias="dataURL")
+
+
+class FileCreateSchema(FileExtendedSchema, BaseCreateSchema):
+    file_id: str = Field(
+        description="Excalidraw file id",
+        validation_alias="id",  # from Excalidraw
+        serialization_alias="file_id",  # to Database
+    )
+
+
 # NOTE
 # Scene is allowed to be updated PARTIALLY, so there are all fields are optional
 class SceneBaseSchema(BaseSchema):
@@ -42,6 +64,13 @@ class SceneSimplifiedReadSchema(SceneBaseSchema, BaseReadSchema):
 
 
 class SceneExtendedReadSchema(SceneExtendedSchema, BaseReadSchema):
-    ...
+    pass
 
-    # files: list # TODO
+
+# NOTE new naming convention here, TODO the same for others
+class GetSceneResponse(SceneExtendedSchema, BaseReadSchema):
+    files: list[FileBaseSchema] = []
+
+
+class UpdateSceneResponse(SceneExtendedSchema, BaseReadSchema):
+    files: list[FileBaseSchema] = []

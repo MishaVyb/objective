@@ -4,12 +4,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from starlette import status
 
-from objective.db.dao.scenes import SceneFilters, SceneRepository
+from objective.db.dao.scenes import FileRepository, SceneFilters, SceneRepository
 from objective.schemas.scenes import (
+    FileBaseSchema,
+    FileCreateSchema,
+    FileExtendedSchema,
+    GetSceneResponse,
     SceneCreateSchema,
     SceneExtendedReadSchema,
     SceneSimplifiedReadSchema,
     SceneUpdateSchema,
+    UpdateSceneResponse,
 )
 
 router = APIRouter()
@@ -24,17 +29,17 @@ async def get_scenes(
     return await dao.get_many(filters)
 
 
-@router.get("/scenes/{id}", response_model=SceneExtendedReadSchema)
+@router.get("/scenes/{scene_id}", response_model=GetSceneResponse)
 async def get_scene(
-    id: UUID,
+    scene_id: UUID,
     dao: Annotated[SceneRepository, Depends()],
 ):
-    return await dao.get_one(id)
+    return await dao.get_one(scene_id)
 
 
 @router.post(
     "/scenes",
-    response_model=SceneExtendedReadSchema,
+    response_model=SceneExtendedReadSchema,  # TODO remove returning heavy data on scene updating / deleting / creating as we do not need it, only meta info
     status_code=status.HTTP_201_CREATED,
 )
 async def create_scene(
@@ -45,26 +50,64 @@ async def create_scene(
 
 
 @router.patch(
-    "/scenes/{id}",
+    "/scenes/{scene_id}",
     status_code=status.HTTP_200_OK,
-    response_model=SceneExtendedReadSchema,
+    response_model=UpdateSceneResponse,  # TODO remove returning heavy data on scene updating / deleting / creating as we do not need it, only meta info
 )
 async def update_scene(
-    id: UUID,
+    scene_id: UUID,
     schema: SceneUpdateSchema,
     dao: Annotated[SceneRepository, Depends()],
 ):
-    return await dao.update(id, schema)
+    return await dao.update(scene_id, schema)
 
 
 @router.delete(
-    "/scenes/{id}",
-    response_model=SceneExtendedReadSchema,
+    "/scenes/{scene_id}",
+    response_model=SceneExtendedReadSchema,  # TODO remove returning heavy data on scene updating / deleting / creating as we do not need it, only meta info
     status_code=status.HTTP_200_OK,
 )
 async def delete_scene(
-    id: UUID,
+    scene_id: UUID,
     dao: Annotated[SceneRepository, Depends()],
 ):
     """Mark for delete."""
-    return await dao.delete(id)
+    return await dao.delete(scene_id)
+
+
+@router.get("/scenes/{scene_id}/files/{file_id}", response_model=FileExtendedSchema)
+async def get_file(
+    scene_id: UUID,
+    file_id: str,
+    dao: Annotated[FileRepository, Depends()],
+):
+    return await dao.get_one_where(scene_id=scene_id, file_id=file_id)
+
+
+@router.post(
+    "/scenes/{scene_id}/files",
+    response_model=FileBaseSchema,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_file(
+    scene_id: UUID,
+    schema: FileCreateSchema,
+    dao: Annotated[FileRepository, Depends()],
+):
+    return await dao.create(schema, scene_id=scene_id)
+
+
+# UNUSED
+# for now its unused on frontend, as we handle delete file by deleting
+# Excalidraw element on frontend, thats all. In future, we could implements deleting
+# files on backend also, if it will be required by getting out of HDD space
+@router.delete("/scenes/{scene_id}/files/{file_id}", response_model=FileBaseSchema)
+async def delete_file(
+    scene_id: UUID,
+    file_id: str,
+    dao: Annotated[FileRepository, Depends()],
+):
+    """Mark for delete."""
+    instance = await dao.get_one_where(scene_id=scene_id, file_id=file_id)
+    await dao.delete(instance.id)
+    return instance

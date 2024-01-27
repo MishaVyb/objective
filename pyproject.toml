@@ -58,6 +58,7 @@ init_typed = true
 warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
+addopts = "--failed-first --durations=10"
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning",

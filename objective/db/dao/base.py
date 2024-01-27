@@ -57,6 +57,7 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
 
     def _has_access_rights(self, obj: _TModel, *, action: Action):
         if action == "read":
+            # TODO add access rights
             # TMP anyone has read access to anything
             return True
 
@@ -73,6 +74,20 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
             raise NotFoundError()
         if not self._has_access_rights(instance, action=action):
             logger.warning(f"Access Denied: {id}")
+            raise ForbiddenError()
+        return instance
+
+    async def get_one_where(self, *, action: Action = "read", **filter_by):
+        instance = (
+            await self.session.execute(
+                select(self.model).filter_by(**filter_by).options(*self.options_one),
+            )
+        ).scalar_one_or_none()
+        if not instance:
+            logger.warning(f"Not Found: {filter_by=}")
+            raise NotFoundError()
+        if not self._has_access_rights(instance, action=action):
+            logger.warning(f"Access Denied: {filter_by=}")
             raise ForbiddenError()
         return instance
 
@@ -103,10 +118,10 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         return items
 
     async def create(self, schema: _SchemaCreate, **extra_values):
-        project = self.model(**dict(schema), **extra_values, user_id=self.user.id)
-        self.session.add(project)
+        instance = self.model(**dict(schema), **extra_values, user_id=self.user.id)
+        self.session.add(instance)
         await self.session.commit()
-        return project
+        return instance
 
     async def update(self, id: UUID, schema: _SchemaUpdate | dict):
         obj = await self.get_one(id, action="update")
