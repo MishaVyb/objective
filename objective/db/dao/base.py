@@ -3,6 +3,7 @@ from dataclasses import dataclass, fields
 from typing import Annotated, Generic, Literal, Type, TypeVar
 from uuid import UUID
 
+import sentry_sdk
 from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy import Select, select
@@ -46,14 +47,18 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
     options_one: list[_AbstractLoad] = []
     options_many: list[_AbstractLoad] = []
 
+    user: UserModel
+    """Current user. """
+
     def __init__(
         self,
         user: Annotated[UserModel, Depends(current_active_user)],
         session: Annotated[AsyncSession, Depends(get_db_session)],
     ) -> None:
         self.user = user
-        """Current user. """
         self.session = session
+
+        sentry_sdk.set_user({"username": self.user.email})
 
     def _has_access_rights(self, obj: _TModel, *, action: Action):
         if action == "read":

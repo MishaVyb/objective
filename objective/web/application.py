@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from importlib import metadata
 
@@ -8,6 +9,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from objective.settings import settings
 from objective.web.router import api_router
+from objective.web.sentry import SentryTracingContextDepends
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -21,11 +25,16 @@ async def lifespan(app: FastAPI):
 
 
 def get_app() -> FastAPI:
+    logger.info(f"Initialize app. {settings!r}")
+
     app = FastAPI(
         title="objective",
         version=metadata.version("objective"),
         default_response_class=UJSONResponse,
         lifespan=lifespan,
+        dependencies=[
+            SentryTracingContextDepends(dashboard_url=settings.sentry_url),
+        ],
     )
 
     app.add_middleware(

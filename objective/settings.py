@@ -26,9 +26,15 @@ class Settings(BaseSettings):
     db_host: str = "localhost"
     db_port: int = 5432
     db_user: str = "objective"
-    db_pass: str = "objective"
+    db_pass: SecretStr = SecretStr("objective")
     db_base: str = "objective"
     db_echo: bool = False
+
+    # Sentry
+    sentry_dns: str | None = None
+    sentry_env: Literal["dev", "staging", "production"] = "dev"
+    sentry_tracing: bool = True
+    sentry_url: str | None = None
 
     @property
     def db_url(self):
@@ -37,7 +43,7 @@ class Settings(BaseSettings):
             host=self.db_host,
             port=self.db_port,
             username=self.db_user,
-            password=self.db_pass,
+            password=self.db_pass.get_secret_value(),
             database=self.db_base,
         )
 
