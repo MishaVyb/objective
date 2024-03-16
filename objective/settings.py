@@ -26,11 +26,11 @@ class Settings(BaseSettings):
     docs_url: str = "/api/docs"
 
     # Variables for the database
-    db_host: str = "localhost"
-    db_port: int = 5432
-    db_user: str = "objective"
-    db_pass: SecretStr = SecretStr("objective")
-    db_base: str = "objective"
+    db_host: str
+    db_port: int
+    db_user: str
+    db_pass: SecretStr
+    db_base: str
     db_echo: bool = False
 
     # Sentry

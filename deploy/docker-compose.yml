@@ -1,33 +1,18 @@
 version: '3.9'
 
 services:
-  api:
-    build:
-      context: .
-      dockerfile: ./deploy/Dockerfile
-      target: prod
-    image: objective:${OBJECTIVE_VERSION:-latest}
-    restart: always
-    env_file:
-    - .env
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      OBJECTIVE_HOST: 0.0.0.0
-      OBJECTIVE_DB_HOST: objective-db
-      OBJECTIVE_DB_PORT: 5432
-      OBJECTIVE_DB_USER: objective
-      OBJECTIVE_DB_PASS: objective
-      OBJECTIVE_DB_BASE: objective
-
   db:
     image: postgres:13.8-bullseye
     hostname: objective-db
+    ports:
+    - "5433:5432"
+    env_file:
+    - .env.production
     environment:
-      POSTGRES_PASSWORD: "objective"
-      POSTGRES_USER: "objective"
-      POSTGRES_DB: "objective"
+      POSTGRES_PASSWORD: objective
+      POSTGRES_USER: objective
+      POSTGRES_DB: objective
+
     volumes:
     - objective-db-data:/var/lib/postgresql/data
     restart: always
@@ -41,6 +26,8 @@ services:
     image: objective:${OBJECTIVE_VERSION:-latest}
     restart: "no"
     command: alembic upgrade head
+    env_file:
+    - .env.production
     environment:
       OBJECTIVE_DB_HOST: objective-db
       OBJECTIVE_DB_PORT: 5432
@@ -51,7 +38,6 @@ services:
       db:
         condition: service_healthy
 
-
   nginx:
     image: nginx:1.19.3
     ports:
@@ -61,8 +47,34 @@ services:
       source: ./deploy/nginx.conf
       target: /etc/nginx/conf.d/default.conf
 
+    - type: bind
+      source: ./deploy/build
+      target: /usr/share/nginx/html/
+
     depends_on:
     - migrator
+
+  api:
+    build:
+      context: .
+      dockerfile: ./deploy/Dockerfile
+      target: prod
+    image: objective:${OBJECTIVE_VERSION:-latest}
+    ports:
+    - "8000:8000"
+    restart: always
+    env_file:
+    - .env.production
+    environment:
+      OBJECTIVE_HOST: 0.0.0.0
+      OBJECTIVE_DB_HOST: objective-db
+      OBJECTIVE_DB_PORT: 5432
+      OBJECTIVE_DB_USER: objective
+      OBJECTIVE_DB_PASS: objective
+      OBJECTIVE_DB_BASE: objective
+    depends_on:
+      db:
+        condition: service_healthy
 
 
 volumes:
