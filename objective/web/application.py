@@ -30,6 +30,8 @@ def get_app() -> FastAPI:
     app = FastAPI(
         title="objective",
         version=metadata.version("objective"),
+        openapi_url=settings.openapi_url,
+        docs_url=settings.docs_url,
         default_response_class=UJSONResponse,
         lifespan=lifespan,
         dependencies=[

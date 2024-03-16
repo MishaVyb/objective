@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     log_level: str | int = logging.DEBUG
     users_secret: SecretStr = Field(min_length=10)
 
+    openapi_url: str = "/api/openapi.json"
+    docs_url: str = "/api/docs"
+
     # Variables for the database
     db_host: str = "localhost"
     db_port: int = 5432
