@@ -1,0 +1,5 @@
+# PRODUCTION
+
+# TODO
+# - the same docker-compose file but with another ports (use variables???)
+# - another env file

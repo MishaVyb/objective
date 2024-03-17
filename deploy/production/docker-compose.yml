@@ -9,7 +9,7 @@ services:
     ports:
     - "5433:5432"
     env_file:
-    - .env.production
+    - .env.production.local
     environment:
       POSTGRES_PASSWORD: objective
       POSTGRES_USER: objective
@@ -29,7 +29,7 @@ services:
     restart: "no"
     command: alembic upgrade head
     env_file:
-    - .env.production
+    - .env.production.local
     environment:
       OBJECTIVE_DB_HOST: objective-db
       OBJECTIVE_DB_PORT: 5432
@@ -66,7 +66,7 @@ services:
     - "8000:8000"
     restart: always
     env_file:
-    - .env.production
+    - .env.production.local
     environment:
       OBJECTIVE_HOST: 0.0.0.0
       OBJECTIVE_DB_HOST: objective-db
