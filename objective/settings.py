@@ -14,12 +14,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class Settings(BaseSettings):
     """Application settings."""
 
+    environment: Literal["dev", "production", "pytest"]
+
     host: str = "127.0.0.1"
     port: int = 8000
     workers_count: int = 1  # quantity of workers for uvicorn
     reload: bool = False  # Enable uvicorn reloading
-    environment: Literal["dev", "prod", "pytest"] = "dev"
+
     log_level: str | int = logging.DEBUG
+
     users_secret: SecretStr = Field(min_length=10)
 
     openapi_url: str = "/api/openapi.json"
@@ -35,7 +38,7 @@ class Settings(BaseSettings):
 
     # Sentry
     sentry_dns: str | None = None
-    sentry_env: Literal["dev", "staging", "production"] = "dev"
+    sentry_env: Literal["dev", "staging", "production"]
     sentry_tracing: bool = True
     sentry_url: str | None = None
 
