@@ -52,7 +52,7 @@ services:
     image: nginx:1.19.3
     ports:
     - "80:80"
-    - "1234:1234" # debug
+    - "443:443"
     volumes:
     - type: bind
       source: ./deploy/production/nginx.conf
