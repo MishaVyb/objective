@@ -12,8 +12,9 @@ services:
     - "5433:5432"   # NOTE: we bind 5433 to avoid conflicts with popular 5432 port
     env_file:
     - ./deploy/production/.env
+
     volumes:
-    - database:/var/lib/postgresql/data
+    - database16:/var/lib/postgresql/data
 
     restart: always
     healthcheck:
@@ -84,5 +85,5 @@ services:
         condition: service_healthy
 
 volumes:
-  database:
-    name: database
+  database16:
+    name: database16
