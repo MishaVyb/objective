@@ -6,22 +6,18 @@ version: '3.9'
 
 services:
   db:
-    image: postgres:13.8-bullseye
-    hostname: objective-db
+    image: postgres:16.2-bullseye
+    hostname: db
     ports:
-    - "5433:5432"
+    - "5433:5432"   # NOTE: we bind 5433 to avoid conflicts with popular 5432 port
     env_file:
     - ./deploy/production/.env
-    environment:
-      POSTGRES_PASSWORD: objective
-      POSTGRES_USER: objective
-      POSTGRES_DB: objective
-
     volumes:
-    - objective-db-data:/var/lib/postgresql/data
+    - database:/var/lib/postgresql/data
+
     restart: always
     healthcheck:
-      test: pg_isready -U objective
+      test: pg_isready -U ${POSTGRES_DB}
       interval: 2s
       timeout: 3s
       retries: 40
@@ -33,17 +29,16 @@ services:
     env_file:
     - ./deploy/production/.env
     environment:
-      OBJECTIVE_DB_HOST: objective-db
+      OBJECTIVE_DB_HOST: db
       OBJECTIVE_DB_PORT: 5432
-      OBJECTIVE_DB_USER: objective
-      OBJECTIVE_DB_PASS: objective
-      OBJECTIVE_DB_BASE: objective
     depends_on:
       db:
         condition: service_healthy
 
   certbot:
     image: certbot/certbot:latest
+    env_file:
+    - ./deploy/production/.env
     volumes:
     - ./certbot/www/:/var/www/certbot/:rw
     - ./certbot/conf/:/etc/letsencrypt/:rw
@@ -62,6 +57,10 @@ services:
       source: ./deploy/production/build
       target: /usr/share/nginx/html/
 
+    - type: bind
+      source: ./certbot/www
+      target: /var/www/certbot/
+
     depends_on:
     - migrator
 
@@ -72,22 +71,18 @@ services:
       target: prod
     image: objective:${OBJECTIVE_VERSION:-latest}
     ports:
-    - "8000:8000"
+    - "8000:8000"   # for debug or local dev porpuses we bind 8000, but nginx 80/443 is used for production
     restart: always
     env_file:
     - ./deploy/production/.env
     environment:
       OBJECTIVE_HOST: 0.0.0.0
-      OBJECTIVE_DB_HOST: objective-db
+      OBJECTIVE_DB_HOST: db
       OBJECTIVE_DB_PORT: 5432
-      OBJECTIVE_DB_USER: objective
-      OBJECTIVE_DB_PASS: objective
-      OBJECTIVE_DB_BASE: objective
     depends_on:
       db:
         condition: service_healthy
 
-
 volumes:
-  objective-db-data:
-    name: objective-db-data
+  database:
+    name: database
