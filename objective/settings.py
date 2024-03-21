@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class Settings(BaseSettings):
     """Application settings."""
 
-    environment: Literal["dev", "production", "pytest"]
+    environment: Literal["pytest", "dev", "staging", "production"]
 
     host: str = "127.0.0.1"
     port: int = 8000
