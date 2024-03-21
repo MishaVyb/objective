@@ -11,7 +11,7 @@ services:
     env_file:
     - ./deploy/staging/.env
     volumes:
-    - database16:/var/lib/postgresql/data
+    - database16_staging:/var/lib/postgresql/data
     restart: always
 
   migrator:
@@ -61,5 +61,5 @@ services:
       OBJECTIVE_DB_PORT: 5432
 
 volumes:
-  database16:
-    name: database16
+  database16_staging:
+    name: database16_staging
