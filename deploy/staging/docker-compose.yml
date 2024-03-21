@@ -1,5 +1,70 @@
-# PRODUCTION
+# STAGING
 
-# TODO
-# - the same docker-compose file but with another ports (use variables???)
-# - another env file
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16.2-bullseye
+    hostname: db
+    ports:
+    - "5434:5432"   # NOTE: we bind 5434 to avoid conflicts with popular 5432 port
+    env_file:
+    - ./deploy/staging/.env
+    volumes:
+    - database16:/var/lib/postgresql/data
+    restart: always
+
+
+  migrator:
+    image: objective:${OBJECTIVE_VERSION:-latest}
+    restart: "no"
+    command: alembic upgrade head
+    env_file:
+    - ./deploy/staging/.env
+    environment:
+      OBJECTIVE_DB_HOST: db
+      OBJECTIVE_DB_PORT: 5432
+
+  nginx:
+    image: nginx:1.19.3
+    ports:
+    - "80:80"
+    - "443:443"
+    volumes:
+    - type: bind
+      source: ./deploy/staging/nginx.conf
+      target: /etc/nginx/conf.d/default.conf
+
+      # frontend build
+    - type: bind
+      source: ./deploy/staging/build
+      target: /usr/share/nginx/html/
+
+    depends_on:
+    - migrator
+
+  api:
+    build:
+      context: .
+      dockerfile: ./deploy/Dockerfile
+      target: prod
+    image: objective:${OBJECTIVE_VERSION:-latest}
+    ports:
+      # NOTE
+      # for debug or local dev porpuses we bind 8008, but nginx 80/443 is used for staging
+    - "8008:8000"
+    restart: always
+    env_file:
+    - ./deploy/staging/.env
+    environment:
+      OBJECTIVE_HOST: 0.0.0.0
+      OBJECTIVE_DB_HOST: db
+      OBJECTIVE_DB_PORT: 5432
+    # FXIME
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+volumes:
+  database16:
+    name: database16
