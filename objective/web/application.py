@@ -1,6 +1,5 @@
 import logging
 from contextlib import asynccontextmanager
-from importlib import metadata
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +28,8 @@ def get_app() -> FastAPI:
 
     app = FastAPI(
         title="objective",
-        version=metadata.version("objective"),
+        description=settings.environment,
+        version=settings.version,
         openapi_url=settings.openapi_url,
         docs_url=settings.docs_url,
         default_response_class=UJSONResponse,

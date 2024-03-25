@@ -1,4 +1,5 @@
 FROM python:3.11.4-slim-bullseye as prod
+
 RUN apt-get update && apt-get install -y \
   gcc \
   && rm -rf /var/lib/apt/lists/*
@@ -15,6 +16,7 @@ WORKDIR /app/src
 
 # Installing requirements
 RUN poetry install --only main
+
 # Removing gcc
 RUN apt-get purge -y \
   gcc \
@@ -24,8 +26,7 @@ RUN apt-get purge -y \
 COPY . /app/src/
 RUN poetry install --only main
 
+ARG OBJECTIVE_VERSION=1.0.0
+ENV OBJECTIVE_VERSION=$OBJECTIVE_VERSION
+
 CMD ["/usr/local/bin/python", "-m", "objective"]
-
-FROM prod as dev
-
-RUN poetry install

@@ -9,20 +9,29 @@ services:
     ports:
     - "5434:5432"   # NOTE: we bind 5434 to avoid conflicts with popular 5432 port
     env_file:
-    - ./deploy/staging/.env
+    - ./.env
     volumes:
-    - database16_staging:/var/lib/postgresql/data
+    - objective_database_staging:/var/lib/postgresql/data
+
     restart: always
+    healthcheck:
+      test: pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+      interval: 2s
+      timeout: 3s
+      retries: 40
 
   migrator:
-    image: objective:${OBJECTIVE_VERSION:-latest}
+    image: objective:staging
     restart: "no"
     command: alembic upgrade head
     env_file:
-    - ./deploy/staging/.env
+    - ./.env
     environment:
       OBJECTIVE_DB_HOST: db
       OBJECTIVE_DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
 
   nginx:
     image: nginx:1.19.3
@@ -30,36 +39,34 @@ services:
     - "8008:80"
     volumes:
     - type: bind
-      source: ./deploy/staging/nginx.conf
+      source: ./nginx.conf
       target: /etc/nginx/conf.d/default.conf
 
-        # frontend build
+    # frontend build
     - type: bind
-      source: ./deploy/staging/build
+      source: ./build
       target: /usr/share/nginx/html/
 
     depends_on:
     - migrator
 
   api:
-    build:
-      context: .
-      dockerfile: ./deploy/Dockerfile
-      target: prod
-    image: objective:${OBJECTIVE_VERSION:-latest}
+    image: objective:staging
     restart: always
 
-    # NOTE use hginx
-    # ports:
-    #   - ...
+    ports:
+    - "8010:8000" # NOTE: objective.services:8010/api/docs
 
     env_file:
-    - ./deploy/staging/.env
+    - ./.env
     environment:
       OBJECTIVE_HOST: 0.0.0.0
       OBJECTIVE_DB_HOST: db
       OBJECTIVE_DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
-  database16_staging:
-    name: database16_staging
+  objective_database_staging:
+    name: objective_database_staging

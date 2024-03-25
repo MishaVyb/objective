@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     users_secret: SecretStr = Field(min_length=10)
 
+    version: str = "1.0.0"
     openapi_url: str = "/api/openapi.json"
     docs_url: str = "/api/docs"
 
