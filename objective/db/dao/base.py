@@ -28,7 +28,7 @@ Action = Literal["create", "read", "update", "delete"]
 
 @dataclass
 class FiltersBase:
-    is_deleted: bool | None = None
+    is_deleted: bool | None = False
 
     def emit(self, q: Select[_TSelect]):
         filters = {}
