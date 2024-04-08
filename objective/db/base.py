@@ -21,4 +21,9 @@ class Base(DeclarativeBase):
         cls,
         reference_scheme: Type[BaseSchema],
     ) -> list[QueryableAttribute]:
-        return [getattr(cls, fieldname) for fieldname in reference_scheme.model_fields]
+        columns = cls.__table__.columns
+        return [
+            getattr(cls, fieldname)
+            for fieldname in reference_scheme.model_fields
+            if fieldname in columns
+        ]

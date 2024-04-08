@@ -54,17 +54,23 @@ class SceneExtendedSchema(SceneBaseSchema):
 class SceneCreateSchema(SceneExtendedSchema, BaseCreateSchema):
     project_id: UUID  # required
 
+    # TODO
+    # files: list[FileBaseSchema] = []
+
 
 class SceneUpdateSchema(SceneExtendedSchema, BaseUpdateSchema):
     pass
 
+    # Do not need files here as we add new files to scene by POST .../scene/files/
+    # files: list[FileBaseSchema] = []
+
 
 class SceneSimplifiedReadSchema(SceneBaseSchema, BaseReadSchema):
-    pass
+    files: list[FileBaseSchema] = []
 
 
 class SceneExtendedReadSchema(SceneExtendedSchema, BaseReadSchema):
-    pass
+    files: list[FileBaseSchema] = []
 
 
 # NOTE new naming convention here, TODO the same for others

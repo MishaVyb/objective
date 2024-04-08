@@ -72,10 +72,8 @@ async def test_scene_crud(
     assert json["name"] == "new-name"
 
     # [3.1] update full
-    response = await client.patch(
-        f"/api/scenes/{scene_id}",
-        json=json | scene_update_request_body,
-    )
+    json = json | scene_update_request_body
+    response = await client.patch(f"/api/scenes/{scene_id}", json=json)
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
 
@@ -105,11 +103,11 @@ async def test_scene_crud(
     json = response.json()
     pprint(json)
 
-    # get all
+    # get without filters -- only not deleted
     response = await client.get(f"/api/scenes")
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
-    assert len(json) == 2  # both: default and deleted
+    assert len(json) == 1  # only default
 
     # get from projects
     response = await client.get(f"/api/projects/{project_id}")

@@ -126,7 +126,16 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         instance = self.model(**dict(schema), **extra_values, user_id=self.user.id)
         self.session.add(instance)
         await self.session.commit()
-        return instance
+
+        # TMP refresh all relationship depending on options
+        # waiting for new backend implementation
+        stm = (
+            select(self.model)
+            .filter_by(id=instance.id)
+            .options(*(self.options_one or self.options_many))
+        )
+        inst = (await self.session.execute(stm)).scalars().one()
+        return inst
 
     async def update(self, id: UUID, schema: _SchemaUpdate | dict):
         obj = await self.get_one(id, action="update")
@@ -145,5 +154,5 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
 
     async def delete(self, id: UUID):
         """Mark for delete."""
-        # TODO mark delete cascade?
+        # TODO mark delete cascade (mark scenes as deleted also!)
         return await self.update(id, dict(is_deleted=True))

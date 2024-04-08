@@ -20,13 +20,14 @@ from objective.schemas.scenes import (
 router = APIRouter()
 
 
-@router.get("/scenes", response_model=list[SceneSimplifiedReadSchema])
+@router.get("/scenes", response_model=list[SceneExtendedReadSchema])
 async def get_scenes(
     filters: Annotated[SceneFilters, Depends()],
     dao: Annotated[SceneRepository, Depends()],
 ):
     """Get current user scenes."""
-    return await dao.get_many(filters)
+    scenes = await dao.get_many(filters)
+    return [scene for scene in scenes if not scene.project.is_deleted]  # TMP
 
 
 @router.get("/scenes/{scene_id}", response_model=GetSceneResponse)
@@ -39,7 +40,7 @@ async def get_scene(
 
 @router.post(
     "/scenes",
-    response_model=SceneExtendedReadSchema,  # TODO remove returning heavy data on scene updating / deleting / creating as we do not need it, only meta info
+    response_model=SceneSimplifiedReadSchema,  # TODO remove returning heavy data on scene updating / deleting / creating as we do not need it, only meta info
     status_code=status.HTTP_201_CREATED,
 )
 async def create_scene(
@@ -64,7 +65,7 @@ async def update_scene(
 
 @router.delete(
     "/scenes/{scene_id}",
-    response_model=SceneExtendedReadSchema,  # TODO remove returning heavy data on scene updating / deleting / creating as we do not need it, only meta info
+    response_model=SceneSimplifiedReadSchema,  # TODO remove returning heavy data on scene updating / deleting / creating as we do not need it, only meta info
     status_code=status.HTTP_200_OK,
 )
 async def delete_scene(
