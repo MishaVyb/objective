@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     sentry_tracing: bool = True
     sentry_url: str | None = None
 
+    #
+    debug_freeze: float | None = None
+
     @property
     def db_url(self):
         return URL.create(

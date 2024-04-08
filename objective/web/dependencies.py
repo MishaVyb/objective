@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import uuid
 
 from fastapi import Depends
@@ -15,8 +17,14 @@ from objective.db.dao.users import UserManager, UserRepository
 from objective.db.models.users import UserModel
 from objective.settings import settings
 
+logger = logging.getLogger(__name__)
+
 
 async def get_db_session(request: Request):
+    if settings.debug_freeze:
+        logger.debug("Sleeping for %s seconds", settings.debug_freeze)
+        await asyncio.sleep(settings.debug_freeze)
+
     engine: AsyncEngine = request.app.state.db_engine
     async with AsyncSession(engine, expire_on_commit=False) as session:
         # NOTE:
