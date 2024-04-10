@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dns: str | None = None
     sentry_env: Literal["dev", "staging", "production"] | None = None
-    sentry_tracing: bool = True
+    sentry_tracing: bool = False
     sentry_url: str | None = None
     sentry_dashboard_url: str | None = None  # TODO
 
