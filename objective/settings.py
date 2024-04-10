@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     sentry_env: Literal["dev", "staging", "production"] | None = None
     sentry_tracing: bool = True
     sentry_url: str | None = None
+    sentry_dashboard_url: str | None = None  # TODO
 
     #
     debug_freeze: float | None = None
@@ -70,9 +71,9 @@ settings = Settings()
 # logger settings
 
 FMT_STRING = (
-    "%(levelprefix)s %(name)s [%(asctime)s] %(message)s"
+    "%(levelprefix)s [%(name)s] [%(asctime)s] %(message)s"
     if settings.environment == "prod"
-    else "%(levelprefix)s - %(message)s"
+    else "%(levelprefix)s [%(name)s] - %(message)s"
 )
 
 LOGGER_CONFIG = {
@@ -119,3 +120,4 @@ dictConfig(LOGGER_CONFIG)
 logging.getLogger("multipart").setLevel("INFO")
 logging.getLogger("asyncio").setLevel("INFO")
 logging.getLogger("passlib").setLevel("INFO")
+logging.getLogger("urllib3").setLevel("INFO")
