@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     host: str = "127.0.0.1"
     port: int = 8000
-    workers_count: int = 1  # quantity of workers for uvicorn
+    workers_count: int = 2  # quantity of workers for uvicorn
     reload: bool = False  # Enable uvicorn reloading
 
     log_level: str | int = logging.DEBUG
@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     openapi_url: str = "/api/openapi.json"
     docs_url: str = "/api/docs"
 
-    # Variables for the database
     db_host: str
     db_port: int
     db_user: str
@@ -37,15 +36,18 @@ class Settings(BaseSettings):
     db_base: str
     db_echo: bool = False
 
-    # Sentry
     sentry_dns: str | None = None
     sentry_env: Literal["dev", "staging", "production"] | None = None
     sentry_tracing: bool = False
     sentry_url: str | None = None
     sentry_dashboard_url: str | None = None  # TODO
 
-    #
     debug_freeze: float | None = None
+
+    initial_scenes: list[Path] = [
+        PROJECT_ROOT / "objective/data/scenes/ParisTexas.objective",
+        PROJECT_ROOT / "objective/data/scenes/Sicario.objective",
+    ]
 
     @property
     def db_url(self):

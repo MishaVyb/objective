@@ -58,6 +58,18 @@ class SceneCreateSchema(SceneExtendedSchema, BaseCreateSchema):
     # files: list[FileBaseSchema] = []
 
 
+FileId = str
+
+
+class SceneJSONFileSchema(BaseSchema):
+    type: str | None = None
+    version: int | None = None
+    source: str | None = None
+    elements: Any | None = None
+    app_state: Any | None = Field(default=None, alias="appState")
+    files: dict[FileId, FileCreateSchema]
+
+
 class SceneUpdateSchema(SceneExtendedSchema, BaseUpdateSchema):
     pass
 

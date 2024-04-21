@@ -2,12 +2,12 @@ import uuid
 from pprint import pprint
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 from starlette import status
 from tests.conftest import ClientsFixture
 from tests.utils import verbose
 
-from objective.db.dao.projects import ProjectRepository
 from objective.db.models.users import UserModel
 from objective.schemas.scenes import SceneCreateSchema, SceneUpdateSchema
 
@@ -21,7 +21,9 @@ async def test_scene_crud(
     user: UserModel,
     client: AsyncClient,
     scene_update_request_body: dict,
+    app: FastAPI,
 ) -> None:
+    default_scenes_amount = len(app.state.initial_scenes)
     project_id = user.projects[0].id
 
     # [1] create
@@ -56,9 +58,9 @@ async def test_scene_crud(
     assert response.status_code == status.HTTP_200_OK, verbose(response)
 
     json = response.json()
-    pprint(json)
-    assert json["scenes"][0]["name"] == ProjectRepository.DEFAULT_SCENE_NAME
-    assert json["scenes"][1]["name"] == "test-scene"
+    new_scene_index = default_scenes_amount
+    assert len(json["scenes"]) == default_scenes_amount + 1
+    assert json["scenes"][new_scene_index]["name"] == "test-scene"
 
     # [3] update simple
     response = await client.patch(
@@ -107,13 +109,13 @@ async def test_scene_crud(
     response = await client.get(f"/api/scenes")
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
-    assert len(json) == 1  # only default
+    assert len(json) == default_scenes_amount  # only default
 
     # get from projects
     response = await client.get(f"/api/projects/{project_id}")
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
-    assert len(json["scenes"]) == 2  # both: default and deleted
+    assert len(json["scenes"]) == default_scenes_amount + 1  # both: default and deleted
 
     # get (with filter)
     response = await client.get(f"/api/scenes", params={"is_deleted": True})
@@ -126,8 +128,8 @@ async def test_scene_crud(
     response = await client.get(f"/api/scenes", params={"is_deleted": False})
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
-    assert len(json) == 1  # only default
-    assert json[0]["name"] == ProjectRepository.DEFAULT_SCENE_NAME
+    assert len(json) == len(app.state.initial_scenes)  # only default
+    assert json[0]["name"] == app.state.initial_scenes[0].app_state["name"]
 
 
 async def test_scene_404(clients: ClientsFixture):

@@ -13,6 +13,7 @@ from asgi_lifespan import LifespanManager
 from fastapi import FastAPI, Request
 from httpx import AsyncClient
 from pydantic_settings import SettingsConfigDict
+from pytest_mock import MockerFixture
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from starlette import status
@@ -110,7 +111,10 @@ class ClientsFixture(DataclassBase[AsyncClient]):
 
 
 @pytest.fixture
-async def users(session):
+async def users(session: AsyncSession, mocker: MockerFixture, app: FastAPI):
+    mock_request = mocker.Mock()
+    mock_request.app = app
+
     users = {}
     async with get_user_db_context(session) as user_db:
         async with get_user_manager_context(user_db) as user_manager:
@@ -122,6 +126,7 @@ async def users(session):
                         username=f"{field.name}",
                         role="string",
                     ),
+                    request=mock_request,
                 )
 
                 await user_db.session.refresh(

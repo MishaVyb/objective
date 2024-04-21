@@ -7,6 +7,7 @@ from fastapi.responses import UJSONResponse
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from objective.common.exceptions import SentryExceptionsHandlers
+from objective.schemas.scenes import SceneJSONFileSchema
 from objective.settings import settings
 from objective.web.router import api_router
 from objective.web.sentry import SentryTracingContextDepends
@@ -14,8 +15,18 @@ from objective.web.sentry import SentryTracingContextDepends
 logger = logging.getLogger(__name__)
 
 
+def get_initial_scenes() -> list[SceneJSONFileSchema]:
+    result: list[SceneJSONFileSchema] = []
+    for filepath in settings.initial_scenes:
+        with open(filepath) as file:
+            result.append(SceneJSONFileSchema.model_validate_json(file.read()))
+    return result
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.initial_scenes = get_initial_scenes()
+
     engine = create_async_engine(settings.db_url, echo=settings.db_echo)
     app.state.db_engine = engine
 

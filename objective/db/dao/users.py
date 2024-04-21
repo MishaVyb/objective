@@ -35,4 +35,4 @@ class UserManager(UUIDIDMixin, BaseUserManager[UserModel, uuid.UUID]):
         from objective.db.dao.projects import ProjectRepository  # FIXME
 
         self.project_dao = ProjectRepository(user, self.user_db.session)
-        return await self.project_dao.create_default()
+        return await self.project_dao.create_default(request)

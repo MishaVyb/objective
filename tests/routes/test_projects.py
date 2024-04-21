@@ -26,6 +26,19 @@ async def test_default_project(client: AsyncClient) -> None:
     assert len(json) == 1
     assert json[0]["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
 
+    # default scenes:
+
+    assert json[0]["scenes"][0]["files"]
+    assert json[0]["scenes"][0]["name"]
+
+    scene_id = json[0]["scenes"][0]["id"]
+    response = await client.get(f"/api/scenes/{scene_id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+
+    assert json["appState"]
+    assert json["elements"]
+
 
 async def test_project_crud(client: AsyncClient) -> None:
     # [1] create
