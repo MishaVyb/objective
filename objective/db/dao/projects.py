@@ -36,7 +36,7 @@ class ProjectRepository(
     ]
     options_many = options_one
 
-    DEFAULT_PROJECT_NAME = "Default Project"
+    DEFAULT_PROJECT_NAME = "Examples"
     DEFAULT_SCENE_NAME = "Untitled Scene"
 
     async def create(self, schema: ProjectCreateSchema, **extra_values):
