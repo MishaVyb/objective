@@ -186,6 +186,14 @@ async def test_files_crud(user: UserModel, client: AsyncClient) -> None:
         json={"id": "file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
     )
     assert response.status_code == status.HTTP_201_CREATED, verbose(response)
+
+    # [2.1] create files twice -- OK (skip error silently)
+    response = await client.post(
+        f"/api/scenes/{scene_id}/files",
+        json={"id": "file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
+    )
+    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
+
     json = response.json()
     pprint(json)
 

@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -16,8 +17,10 @@ from objective.schemas.scenes import (
     SceneUpdateSchema,
     UpdateSceneResponse,
 )
+from objective.web.exceptions import NotFoundError
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/scenes", response_model=list[SceneExtendedReadSchema])
@@ -95,7 +98,13 @@ async def create_file(
     schema: FileCreateSchema,
     dao: Annotated[FileRepository, Depends()],
 ):
-    return await dao.create(schema, scene_id=scene_id)
+    try:
+        # NOTE: handle multiply requests with the same file from frontend
+        f = await dao.get_one_where(scene_id=scene_id, file_id=schema.file_id)
+        logger.warning("Trying to create file, that already exist: %s", f.file_id)
+        return f
+    except NotFoundError:
+        return await dao.create(schema, scene_id=scene_id)
 
 
 # UNUSED
