@@ -60,7 +60,10 @@ def get_app() -> FastAPI:
 
     # NOTE: do not use wildcards https://fastapi.tiangolo.com/tutorial/cors/#wildcards
     if settings.environment == "dev":
-        origins = ["http://localhost:3000"]
+        origins = [
+            "http://localhost:3000",
+            "http://192.168.1.124:3000",
+        ]
     if settings.environment == "staging":
         origins = ["http://objective.services"]
     if settings.environment == "production":
