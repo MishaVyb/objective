@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     port: int = 8000
     workers_count: int = 2  # quantity of workers for uvicorn
     reload: bool = False  # Enable uvicorn reloading
+    raise_server_exceptions: bool = False
 
     log_level: str | int = logging.DEBUG
 

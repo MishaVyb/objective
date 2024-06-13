@@ -97,11 +97,13 @@ class ExceptionsHandlersBase:
         response_model: Type[ErrorResponseContent] = ErrorResponseContent,
         traceback_limit: int | None = None,
         headers: httpx.Headers | dict = None,
+        raise_server_exceptions: bool = False,
     ) -> None:
         self.debug = debug
         self.response_model = response_model
         self.traceback_limit = traceback_limit
         self.headers = headers
+        self.raise_server_exceptions = raise_server_exceptions
 
     def setup(self, app: FastAPI):
         app.add_exception_handler(ExceptionGroup, self.exception_group_handler)
@@ -205,6 +207,13 @@ class ExceptionsHandlersBase:
         elif not detail:
             detail = self.ERROR_DETAILS.get(status_code)
 
+        # for tests / local debug
+        if (
+            self.raise_server_exceptions
+            and status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR
+        ):
+            raise exc
+
         content = self.response_model(detail=detail, exception=exc_info)
         return await self.finalize_response(content, status_code, debug=debug)
 
@@ -235,6 +244,7 @@ class SentryExceptionsHandlers(ExceptionsHandlersBase):
         response_model: type[ErrorResponseContent] = ErrorResponseContent,
         traceback_limit: int | None = _DEFAULT_TB_LIMIT,
         headers: httpx.Headers | dict = None,
+        raise_server_exceptions: bool = False,
     ) -> None:
         self.dashboard_url = dashboard_url
         super().__init__(
@@ -242,6 +252,7 @@ class SentryExceptionsHandlers(ExceptionsHandlersBase):
             response_model=response_model,
             traceback_limit=traceback_limit,
             headers=headers,
+            raise_server_exceptions=raise_server_exceptions,
         )
 
     async def finalize_response(

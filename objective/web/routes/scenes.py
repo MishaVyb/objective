@@ -1,4 +1,5 @@
 import logging
+from asyncio import TaskGroup
 from typing import Annotated
 from uuid import UUID
 
@@ -6,6 +7,7 @@ from fastapi import APIRouter, Depends
 from starlette import status
 
 from objective.db.dao.scenes import FileRepository, SceneFilters, SceneRepository
+from objective.db.models.scenes import FileModel
 from objective.schemas.scenes import (
     FileBaseSchema,
     FileCreateSchema,
@@ -50,7 +52,44 @@ async def create_scene(
     schema: SceneCreateSchema,
     dao: Annotated[SceneRepository, Depends()],
 ):
-    return await dao.create(schema)
+    files = [
+        FileModel(
+            user_id=dao.user.id,
+            **f.model_dump(),
+        )
+        for f in schema.files
+    ]
+    return await dao.create(schema, files=files)
+
+
+@router.post(
+    "/scenes/{scene_id}/copy",
+    response_model=SceneSimplifiedReadSchema,  # TODO remove returning heavy data on scene updating / deleting / creating as we do not need it, only meta info
+    status_code=status.HTTP_201_CREATED,
+)
+async def copy_scene(
+    scene_id: UUID,
+    schema: SceneUpdateSchema,  # overrides
+    dao_scenes: Annotated[SceneRepository, Depends()],
+    dao_files: Annotated[FileRepository, Depends()],
+):
+    """Duplicate scene. Supports overrides. All scene files are copied too."""
+
+    original = await dao_scenes.get_one(scene_id)
+    orig_schema = SceneExtendedReadSchema.model_validate(original)
+
+    data = orig_schema.model_dump(exclude_unset=True, exclude={"files"})
+    data |= schema.model_dump(exclude_unset=True, exclude={"files"})
+
+    tasks = []
+    async with TaskGroup() as tg:
+        for file in original.files:
+            coro = dao_files.get_one_where(scene_id=scene_id, file_id=file.file_id)
+            tasks.append(tg.create_task(coro))
+
+    original_files = [t.result() for t in tasks]
+    instance = await dao_scenes.create(SceneCreateSchema(**data), files=original_files)
+    return instance
 
 
 @router.patch(

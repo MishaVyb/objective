@@ -68,11 +68,14 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
 
         return obj.user_id == self.user.id
 
-    async def get_one(self, id: UUID, *, action: Action = "read"):
+    async def get_one(
+        self, id: UUID, *, action: Action = "read", refresh: bool = False
+    ):
         instance = await self.session.get(
             self.model,
             id,
             options=self.options_one or self.options_many,
+            populate_existing=refresh,
         )
         if not instance:
             logger.warning(f"Not Found: {id}")
@@ -123,7 +126,7 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         return items
 
     async def create(self, schema: _SchemaCreate, **extra_values):
-        instance = self.model(**dict(schema), **extra_values, user_id=self.user.id)
+        instance = self.model(**(dict(schema) | extra_values), user_id=self.user.id)
         self.session.add(instance)
         await self.session.commit()
 

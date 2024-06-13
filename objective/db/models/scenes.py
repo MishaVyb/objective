@@ -77,7 +77,11 @@ class SceneModel(Base, BaseFieldsMixin):
     app_state: Mapped[dict] = mapped_column(default={})
 
     # relations:
-    files: Mapped[list[FileModel]] = relationship("FileModel", back_populates="scene")
+    files: Mapped[list[FileModel]] = relationship(
+        "FileModel",
+        back_populates="scene",
+        order_by="FileModel.created_at",
+    )
 
 
 class FileModel(Base, BaseFieldsMixin):

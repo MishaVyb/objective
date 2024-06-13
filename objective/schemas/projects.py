@@ -1,3 +1,5 @@
+from typing import Literal
+
 from objective.schemas.base import (
     BaseCreateSchema,
     BaseReadSchema,
@@ -16,7 +18,8 @@ class ProjectCreateSchema(ProjectBaseSchema, BaseCreateSchema):
 
 
 class ProjectUpdateSchema(ProjectBaseSchema, BaseUpdateSchema):
-    pass
+    name: str | None = None
+    is_deleted: Literal[False] | None = None
 
 
 class ProjectReadSchema(ProjectBaseSchema, BaseReadSchema):

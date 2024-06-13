@@ -104,6 +104,20 @@ async def test_project_crud(client: AsyncClient) -> None:
     assert len(json) == 1  # only default
     assert json[0]["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
 
+    # [5] recover
+    response = await client.patch(
+        f"/api/projects/{id}",
+        json=dict(ProjectUpdateSchema(is_deleted=False)),
+    )
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    pprint(json)
+
+    response = await client.get(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    assert json["is_deleted"] is False
+
 
 async def test_project_404(clients: ClientsFixture):
     response = await clients.user.get(f"/api/projects/{uuid.uuid4()}")

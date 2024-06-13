@@ -85,6 +85,7 @@ def get_app() -> FastAPI:
             "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
         },
+        raise_server_exceptions=settings.raise_server_exceptions,
     )
     exc_handlers.setup(app)
 

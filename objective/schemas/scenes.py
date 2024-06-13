@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from pydantic import Field
@@ -47,15 +46,13 @@ class SceneExtendedSchema(SceneBaseSchema):
     type: str | None = None
     version: int | None = None
     source: str | None = None
-    elements: Any | None = None
-    app_state: Any | None = Field(default=None, alias="appState")
+    elements: list = []
+    app_state: dict = Field(default={}, alias="appState")
 
 
 class SceneCreateSchema(SceneExtendedSchema, BaseCreateSchema):
     project_id: UUID  # required
-
-    # TODO
-    # files: list[FileBaseSchema] = []
+    files: list[FileCreateSchema] = []
 
 
 FileId = str
@@ -65,8 +62,8 @@ class SceneJSONFileSchema(BaseSchema):
     type: str | None = None
     version: int | None = None
     source: str | None = None
-    elements: Any | None = None
-    app_state: Any | None = Field(default=None, alias="appState")
+    elements: list = []
+    app_state: dict = Field(default={}, alias="appState")
     files: dict[FileId, FileCreateSchema]
 
 
