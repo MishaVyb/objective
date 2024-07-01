@@ -5,7 +5,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 from starlette import status
-from tests.conftest import ClientsFixture
+from tests.conftest import ClientsFixture, UsersFixture
 from tests.utils import verbose
 
 from objective.db.models.users import UserModel
@@ -173,7 +173,12 @@ async def test_scene_401(clients: ClientsFixture):
 # TODO test create scene add file read file delete file
 
 
-async def test_scene_crud_with_files(user: UserModel, client: AsyncClient) -> None:
+async def test_scene_crud_with_files(
+    users: UsersFixture,
+    clients: ClientsFixture,
+) -> None:
+    user = users.user
+    client = clients.user
     project_id = user.projects[0].id
 
     # [1] create scene
@@ -202,6 +207,7 @@ async def test_scene_crud_with_files(user: UserModel, client: AsyncClient) -> No
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     scene = response.json()
 
+    assert scene["user_id"] == str(user.id)
     assert scene["name"] == "test-scene"
     assert scene["appState"] == {"key": "value"}
     assert scene["elements"] == [{"type": "some-element-type"}]
@@ -243,6 +249,7 @@ async def test_scene_crud_with_files(user: UserModel, client: AsyncClient) -> No
 
     assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
 
+    ##################################################
     # [4] copy scene to new project
 
     # create new project
@@ -265,6 +272,8 @@ async def test_scene_crud_with_files(user: UserModel, client: AsyncClient) -> No
     scene = response.json()
 
     assert scene["id"] != scene_id  # new scene id
+
+    assert scene["user_id"] == str(user.id)
     assert scene["name"] == "copied"
     # NOTE: the same file ids, but it's another record in database as it stored under ../scene_id/file_id
     assert scene["files"] == [
@@ -300,6 +309,89 @@ async def test_scene_crud_with_files(user: UserModel, client: AsyncClient) -> No
 
     # check file also copied
     response = await client.get(f"/api/scenes/{copied_scene_id}/files/{file_id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    file = response.json()
+    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
+
+    ##################################################
+    # [5] copy scene to ANOTHER user's project
+
+    another_client = clients.another_user
+    another_user = users.another_user
+    project_id = another_user.projects[0].id
+
+    # copy scene (with new name)
+    response = await another_client.post(
+        f"/api/scenes/{scene_id}/copy",
+        json=SceneCreateSchema(
+            project_id=project_id,
+            name="copied-to-another-user",
+        ).model_dump(mode="json", exclude_unset=True),
+    )
+    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
+    scene = response.json()
+
+    assert scene["id"] != scene_id  # new scene id
+
+    assert scene["user_id"] == str(another_user.id)
+    assert scene["name"] == "copied-to-another-user"
+    assert scene["files"] == [
+        {"id": "initial-file-id", "mimeType": "mimeType"},
+        {"id": "new-file-id", "mimeType": "mimeType"},
+    ]
+
+    copied_scene_id = scene["id"]
+
+    # read from projects
+    response = await another_client.get(f"/api/projects/{project_id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    scene = response.json()["scenes"][-1]
+
+    assert scene["user_id"] == str(another_user.id)
+    assert scene["name"] == "copied-to-another-user"
+    assert scene["files"] == [
+        {"id": "initial-file-id", "mimeType": "mimeType"},
+        {"id": "new-file-id", "mimeType": "mimeType"},
+    ]
+
+    # read by id
+    response = await another_client.get(f"/api/scenes/{copied_scene_id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    scene = response.json()
+
+    assert scene["user_id"] == str(another_user.id)
+    assert scene["name"] == "copied-to-another-user"
+    assert scene["appState"] == {"key": "value"}  # the same app state
+    assert scene["elements"] == [{"type": "some-element-type"}]  # the same elements
+    assert scene["files"] == [
+        {"id": "initial-file-id", "mimeType": "mimeType"},
+        {"id": "new-file-id", "mimeType": "mimeType"},
+    ]
+
+    # check file also copied
+    response = await another_client.get(
+        f"/api/scenes/{copied_scene_id}/files/{file_id}",
+    )
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    file = response.json()
+    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
+
+    ##################################################
+    # [6] final check: original scene files was not affected (!)
+
+    response = await client.get(f"/api/scenes/{scene_id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    scene = response.json()
+
+    assert scene["user_id"] == str(user.id)
+    assert scene["name"] == "test-scene"
+    assert scene["files"] == [
+        {"id": "initial-file-id", "mimeType": "mimeType"},
+        {"id": "new-file-id", "mimeType": "mimeType"},
+    ]
+
+    # check get original file
+    response = await client.get(f"/api/scenes/{scene_id}/files/{file_id}")
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     file = response.json()
     assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}

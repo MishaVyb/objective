@@ -37,6 +37,7 @@ class BaseFieldsMixin(_TBase):
 
     # relations:
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"))  # TODO created_by
+    """created_by"""
 
     @declared_attr
     def user(cls) -> Mapped[UserModel]:

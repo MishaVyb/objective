@@ -1,5 +1,5 @@
 import logging
-from asyncio import TaskGroup
+from asyncio import Task, TaskGroup
 from typing import Annotated
 from uuid import UUID
 
@@ -8,6 +8,8 @@ from starlette import status
 
 from objective.db.dao.scenes import FileRepository, SceneFilters, SceneRepository
 from objective.db.models.scenes import FileModel
+from objective.db.models.users import UserModel
+from objective.schemas.base import BaseReadSchema
 from objective.schemas.scenes import (
     FileBaseSchema,
     FileCreateSchema,
@@ -19,6 +21,7 @@ from objective.schemas.scenes import (
     SceneUpdateSchema,
     UpdateSceneResponse,
 )
+from objective.web.dependencies import current_active_user
 from objective.web.exceptions import NotFoundError
 
 router = APIRouter()
@@ -70,6 +73,7 @@ async def create_scene(
 async def copy_scene(
     scene_id: UUID,
     schema: SceneUpdateSchema,  # overrides
+    user: Annotated[UserModel, Depends(current_active_user)],
     dao_scenes: Annotated[SceneRepository, Depends()],
     dao_files: Annotated[FileRepository, Depends()],
 ):
@@ -81,14 +85,26 @@ async def copy_scene(
     data = orig_schema.model_dump(exclude_unset=True, exclude={"files"})
     data |= schema.model_dump(exclude_unset=True, exclude={"files"})
 
-    tasks = []
+    tasks: list[Task[FileModel]] = []
     async with TaskGroup() as tg:
         for file in original.files:
             coro = dao_files.get_one_where(scene_id=scene_id, file_id=file.file_id)
             tasks.append(tg.create_task(coro))
 
     original_files = [t.result() for t in tasks]
-    instance = await dao_scenes.create(SceneCreateSchema(**data), files=original_files)
+    copied_files = [
+        # create new file instance which will be attached to new scene by ORM
+        # (and set 'create_by' current user)
+        FileModel(
+            **f.to_dict(
+                # id / user_id / created_at ...
+                exclude=set(BaseReadSchema.model_fields),
+            ),
+            user_id=user.id,
+        )
+        for f in original_files
+    ]
+    instance = await dao_scenes.create(SceneCreateSchema(**data), files=copied_files)
     return instance
 
 
@@ -122,9 +138,22 @@ async def delete_scene(
 async def get_file(
     scene_id: UUID,
     file_id: str,
+    user: Annotated[UserModel, Depends(current_active_user)],
     dao: Annotated[FileRepository, Depends()],
 ):
-    return await dao.get_one_where(scene_id=scene_id, file_id=file_id)
+    try:
+        return await dao.get_one_where(scene_id=scene_id, file_id=file_id)
+    except NotFoundError as e:
+        # TMP ugly fix
+        # TODO see logs how many scene affected by this problem and write
+        # migration script to duplicate those files from other scene to this
+        logger.warning(
+            f"Not found file per scene: {scene_id}. Fallbacks to all files. ",
+        )
+        items = await dao.get_where(file_id=file_id)
+        if not items:
+            raise e
+        return items[0]
 
 
 @router.post(

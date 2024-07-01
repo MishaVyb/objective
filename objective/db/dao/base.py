@@ -99,6 +99,26 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
             raise ForbiddenError()
         return instance
 
+    async def get_where(self, *, action: Action = "read", **filter_by):
+        items = (
+            (
+                await self.session.execute(
+                    select(self.model)
+                    .filter_by(**filter_by)
+                    .options(*self.options_one),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        for item in items:
+            if not self._has_access_rights(item, action=action):
+                logger.warning(f"Access Denied: {item.id}")
+                raise ForbiddenError()
+
+        return items
+
     async def get_many(
         self,
         extra_filters: FiltersBase = None,
