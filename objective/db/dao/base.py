@@ -29,13 +29,18 @@ Action = Literal["create", "read", "update", "delete"]
 @dataclass
 class FiltersBase:
     is_deleted: bool | None = False
+    user_id: UUID | Literal["current_user"] | Literal[""] | None = "current_user"
 
-    def emit(self, q: Select[_TSelect]):
+    def emit(self, q: Select[_TSelect], ctx):
         filters = {}
         for field in fields(self):
             value = getattr(self, field.name)
-            if value is not None:
+            if value is not None and value != "":
                 filters[field.name] = value
+
+            # TMP waiting for new backend
+            if value == "current_user":
+                filters[field.name] = ctx.user.id
 
         return q.filter_by(**filters)
 
@@ -124,15 +129,11 @@ class RepositoryBase(Generic[_TModel, _SchemaCreate, _SchemaUpdate]):
         extra_filters: FiltersBase = None,
         action: Action = "read",
     ):
-        """Get many entities. Filtered by current user."""
+        """Get many entities."""
 
-        q = (
-            select(self.model)
-            .filter_by(user_id=self.user.id)
-            .options(*self.options_many)
-        )
+        q = select(self.model).options(*self.options_many)
         if extra_filters:
-            q = extra_filters.emit(q)
+            q = extra_filters.emit(q, self)
         q = q.order_by(self.model.created_at)
 
         r = await self.session.scalars(q)

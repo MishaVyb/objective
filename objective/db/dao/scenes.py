@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from uuid import UUID
 
 from sqlalchemy.orm import selectinload
 
@@ -14,7 +15,7 @@ from objective.schemas.scenes import (
 
 @dataclass
 class SceneFilters(FiltersBase):
-    pass
+    project_id: UUID | None = None
 
 
 class SceneRepository(

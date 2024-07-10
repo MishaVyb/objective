@@ -8,7 +8,6 @@ from starlette import status
 from tests.conftest import ClientsFixture, UsersFixture
 from tests.utils import verbose
 
-from objective.db.models.users import UserModel
 from objective.schemas.projects import ProjectCreateSchema
 from objective.schemas.scenes import (
     FileCreateSchema,
@@ -23,13 +22,16 @@ pytestmark = [
 
 
 async def test_scene_crud(
-    user: UserModel,
+    users: UsersFixture,
     client: AsyncClient,
     scene_update_request_body: dict,
     app: FastAPI,
 ) -> None:
     default_scenes_amount = len(app.state.initial_scenes)
+    user = users.user
+    another_user = users.another_user
     project_id = user.projects[0].id
+    another_project_id = another_user.projects[0].id
 
     # [1] create
     response = await client.post(
@@ -133,6 +135,24 @@ async def test_scene_crud(
     json = response.json()
     assert len(json) == 1  # only deleted
     assert json[0]["name"] == "new-name"
+
+    # get another project scenes (with filter: project_id and no user)
+    response = await client.get(
+        f"/api/scenes",
+        params={"project_id": str(another_project_id), "user_id": ""},
+    )
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    assert json[0]["user_id"] == str(another_user.id)
+
+    # the same, but omit no user params
+    response = await client.get(
+        f"/api/scenes",
+        params={"project_id": str(another_project_id)},
+    )
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    assert json == []  # because filtering both project_id & current user by default
 
     # get (with filter)
     response = await client.get(f"/api/scenes", params={"is_deleted": False})

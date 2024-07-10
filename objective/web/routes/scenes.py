@@ -33,7 +33,7 @@ async def get_scenes(
     filters: Annotated[SceneFilters, Depends()],
     dao: Annotated[SceneRepository, Depends()],
 ):
-    """Get current user scenes."""
+    """Get scenes. Apply filters."""
     scenes = await dao.get_many(filters)
     return [scene for scene in scenes if not scene.project.is_deleted]  # TMP
 

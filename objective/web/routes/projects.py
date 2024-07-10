@@ -19,7 +19,7 @@ async def get_projects(
     filters: Annotated[ProjectFilters, Depends()],
     dao: Annotated[ProjectRepository, Depends()],
 ):
-    """Get current user projects."""
+    """Get projects. Apply filters."""
     return await dao.get_many(filters)
 
 
