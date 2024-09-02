@@ -1,0 +1,147 @@
+import uuid
+from pprint import pprint
+
+import pytest
+from httpx import AsyncClient
+from starlette import status
+
+from app.repository.repositories import ProjectRepository
+from app.schemas import schemas
+from tests_old.conftest import ClientsFixture
+from tests_old.utils import verbose
+
+pytestmark = [
+    pytest.mark.anyio,
+    pytest.mark.usefixtures("session"),
+]
+
+
+async def test_default_project(client: AsyncClient) -> None:
+    # [1] get all
+    response = await client.get("/api/projects")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+
+    json = response.json()
+    pprint(json)
+    assert len(json) == 1
+    assert json[0]["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
+
+    # default scenes:
+
+    assert json[0]["scenes"][0]["files"]
+    assert json[0]["scenes"][0]["name"]
+
+    scene_id = json[0]["scenes"][0]["id"]
+    response = await client.get(f"/api/scenes/{scene_id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+
+    assert json["appState"]
+    assert json["elements"]
+
+
+async def test_project_crud(client: AsyncClient) -> None:
+    # [1] create
+    response = await client.post(
+        "/api/projects",
+        json=dict(schemas.ProjectCreate(name="test-project")),
+    )
+    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
+    json = response.json()
+    pprint(json)
+    id = json["id"]
+
+    # [2] read
+    response = await client.get("/api/projects")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+
+    json = response.json()
+    pprint(json)
+    assert len(json) == 2  # default and new one
+
+    # [2.1] read by id
+    response = await client.get(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+
+    json = response.json()
+    pprint(json)
+
+    # [3] update
+    response = await client.patch(
+        f"/api/projects/{id}",
+        json=dict(schemas.ProjectUpdate(name="new-name")),
+    )
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    pprint(json)
+
+    response = await client.get(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    assert json["name"] == "new-name"
+
+    # [4] delete
+    response = await client.delete(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    pprint(json)
+
+    # get without filters -- only not deleted
+    response = await client.get(f"/api/projects")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    assert len(json) == 1  # only deleted
+
+    response = await client.get(f"/api/projects", params={"is_deleted": True})
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    assert len(json) == 1  # only deleted
+    assert json[0]["name"] == "new-name"
+
+    response = await client.get(f"/api/projects", params={"is_deleted": False})
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    assert len(json) == 1  # only default
+    assert json[0]["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
+
+    # [5] recover
+    response = await client.patch(
+        f"/api/projects/{id}",
+        json=dict(schemas.ProjectUpdate(is_deleted=False)),
+    )
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    pprint(json)
+
+    response = await client.get(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    json = response.json()
+    assert json["is_deleted"] is False
+
+
+async def test_project_404(clients: ClientsFixture):
+    response = await clients.user.get(f"/api/projects/{uuid.uuid4()}")
+    assert response.status_code == status.HTTP_404_NOT_FOUND, verbose(response)
+
+
+async def test_project_403(clients: ClientsFixture):
+    # someone else's project id:
+    id = (await clients.another_user.get("/api/projects")).json()[0]["id"]
+
+    # read
+    # TMP anyone has read access to anything
+    response = await clients.user.get(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
+
+    # update
+    response = await clients.user.patch(f"/api/projects/{id}", json={"name": "name"})
+    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
+
+    # delete
+    response = await clients.user.delete(f"/api/projects/{id}")
+    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
+
+
+async def test_project_401(clients: ClientsFixture):
+    response = await clients.no_auth.get(f"/api/projects/{uuid.uuid4()}")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED, verbose(response)

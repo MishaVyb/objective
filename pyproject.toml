@@ -4,11 +4,10 @@ version = "0.1.0"
 description = ""
 authors = []
 maintainers = []
-readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-fastapi = "^0.100.0"
+fastapi = "^0.108.0"
 uvicorn = { version = "^0.22.0", extras = ["standard"] }
 fastapi-users = "^12.1.2"
 httpx-oauth = "^0.10.2"
@@ -21,8 +20,9 @@ alembic = "^1.11.1"
 asyncpg = { version = "^0.28.0", extras = ["sa"] }
 aiofiles = "^23.1.0"
 httptools = "^0.6.0"
-sentry-sdk = {extras = ["fastapi"], version = "^1.40.0"}
+sentry-sdk = { extras = ["fastapi"], version = "^1.40.0" }
 pytest-mock = "^3.14.0"
+setuptools = "^74.0.0"
 
 
 [tool.poetry.dev-dependencies]
@@ -42,22 +42,68 @@ asgi-lifespan = "^2.1.0"
 mypy = "^1.5.1"
 schemathesis = "^3.20.2"
 pyright = "^1.1.344"
+dirty-equals = "^0.8.0"
+debugpy = "^1.8.5"
 
 [tool.isort]
 profile = "black"
 multi_line_output = 3
-src_paths = ["objective"]
+
+
+[tool.pydantic-mypy]
+# https://docs.pydantic.dev/latest/integrations/mypy/#configuring-the-plugin
+init_forbid_extra = true
+init_typed = false
+warn_required_dynamic_aliases = false # TMP cor ModelConstructor
 
 
 [tool.mypy]
-python_version = '3.11'
-plugins = 'pydantic.mypy'
-strict_optional = false
+# TO DISABLE PLUGIN GLOBALLY - GO TO EXTENSIONS AND DISABLE MYPY EXTENSION. OR HERE:
+ignore_errors = true # DISABLE
 
-[tool.pydantic-mypy]
-init_forbid_extra = true
-init_typed = true
-warn_required_dynamic_aliases = true
+python_version = "3.11"
+plugins = "pydantic.mypy"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+ignore_missing_imports = true
+# follow_imports = "skip"       # !!!
+follow_imports = "silent" # !!!
+
+# NOTE: I`ve decided, that it`s better to use:
+#   foo: type | None = None
+# Because, for Pydantic, when we are not specifying `None` annotation explicitly,
+# it may cause error on validation round trip
+implicit_optional = false
+
+# DISABLE SOME ERROR CODES (that are enabled by default):
+allow_redefinition = true
+disable_error_code = [
+    "var-annotated", # allows: foo = [], bar = {}
+    "override",
+    "assignment",
+    "misc",
+    "truthy-bool",   # allows for optional pydantic fields declared via ModelConstructor
+]
+
+# ENABLE SOME ERROR CODES (that are turned off by default)
+# strict = true # 📍 Enable all optional error checking flags
+
+check_untyped_defs = true
+# disallow_untyped_defs = true
+strict_equality = true
+warn_unreachable = true
+# implicit_reexport = false # breaks down __init__ module logic...
+
+enable_error_code = [
+    "redundant-expr",
+    "possibly-undefined",
+    "truthy-bool",
+    "truthy-iterable",
+    "unused-awaitable",
+]
+
 
 [tool.pytest.ini_options]
 addopts = "--failed-first --durations=10"
@@ -67,33 +113,3 @@ filterwarnings = [
     "ignore:.*unclosed.*:ResourceWarning",
 ]
 env = ["PYTEST_USERS_SECRET=1234567890"]
-
-[tool.fastapi-template.options]
-project_name = "objective"
-api_type = "rest"
-enable_redis = "None"
-enable_rmq = "None"
-ci_type = "github"
-enable_migrations = "True"
-enable_taskiq = "None"
-enable_kube = "None"
-kube_name = "objective"
-enable_routers = "True"
-enable_kafka = "None"
-enable_loguru = "None"
-traefik_labels = "None"
-add_dummy = "True"
-orm = "sqlalchemy"
-self_hosted_swagger = "True"
-prometheus_enabled = "None"
-sentry_enabled = "None"
-otlp_enabled = "None"
-pydanticv1 = "None"
-gunicorn = "None"
-add_users = "True"
-cookie_auth = "None"
-jwt_auth = "True"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
