@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing_extensions import deprecated
 
+from app.applications.objective import ObjectiveAPP
 from app.config import AppSettings
 from app.repository.base.sqlalchemy import (
     CommonSQLAlchemyRepository,
@@ -58,9 +59,8 @@ class ProjectRepository(
 
     @deprecated("")
     async def create_default(self, request: Request | None = None):
-        initial: list[
-            schemas.SceneJsonFilePersistence
-        ] = request.app.state.initial_scenes
+        app: ObjectiveAPP = request.app
+        initial = app.state.initial_scenes
         scenes = [
             models.Scene(
                 name=scene.app_state.get("name") or self.DEFAULT_SCENE_NAME,

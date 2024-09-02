@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
@@ -15,7 +15,9 @@ if TYPE_CHECKING:
 class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # declarative fields:
-    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(timezone.utc),
+    )
 
     # custom extra fields:
     username: Mapped[str | None]

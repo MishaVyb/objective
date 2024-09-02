@@ -20,7 +20,7 @@ else:
 # another module to resolve circular imports from 'repositories.py'
 
 
-class UserRepository(SQLAlchemyUserDatabase):
+class UserRepository(SQLAlchemyUserDatabase[models.User, uuid.UUID]):
     model: Type[models.User] = models.User
 
     def __init__(
@@ -29,6 +29,27 @@ class UserRepository(SQLAlchemyUserDatabase):
         **_,  # capability with SQLAlchemyRepository
     ):
         super().__init__(session, self.model)
+
+    # override to using 'flush' instead of 'commit':
+
+    async def create(self, create_dict: dict) -> models.User:
+        user = self.user_table(**create_dict)
+        self.session.add(user)
+        await self.session.flush()
+        await self.session.refresh(user)
+        return user
+
+    async def update(self, user: models.User, update_dict: dict) -> models.User:
+        for key, value in update_dict.items():
+            setattr(user, key, value)
+        self.session.add(user)
+        await self.session.flush()
+        await self.session.refresh(user)
+        return user
+
+    async def delete(self, user: models.User) -> None:
+        await self.session.delete(user)
+        await self.session.flush()
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[models.User, uuid.UUID]):

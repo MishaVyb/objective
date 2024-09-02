@@ -129,8 +129,12 @@ class DeclarativeFieldsMixin(Base):
         primary_key=True,
         server_default=func.uuid_generate_v4(),
     )
-    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
-    updated_at: Mapped[datetime | None] = mapped_column(onupdate=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     created_by: Mapped[uuid.UUID] = mapped_column("user_id", ForeignKey("user.id"))
     updated_by: Mapped[uuid.UUID | None]  # TODO foreign key

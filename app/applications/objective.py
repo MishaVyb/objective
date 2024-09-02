@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
+from app.schemas import schemas
 from common.fastapi.exceptions import SentryExceptionsHandlers
 from common.fastapi.monitoring.base import JournalRecordMiddleware
 from common.fastapi.monitoring.sentry import (
@@ -31,15 +32,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: ObjectiveAPP):
-    try:
-        # engine could be already present (at pytest session)
-        engine = app.state.engine
-    except AttributeError:
-        engine = app.state.engine = create_async_engine(
-            app.state.settings.DATABASE_URL,
-            echo=app.state.settings.DATABASE_ECHO,
-            echo_pool=app.state.settings.DATABASE_ECHO_POOL,
-        )
+    # try:
+    #     # engine could be already present (at pytest session)
+    #     engine = app.state.engine
+    # except AttributeError:
+    engine = app.state.engine = create_async_engine(
+        app.state.settings.DATABASE_URL,
+        echo=app.state.settings.DATABASE_ECHO,
+        echo_pool=app.state.settings.DATABASE_ECHO_POOL,
+    )
     app.state.session_maker = async_sessionmaker(
         engine,
         autoflush=True,
@@ -57,9 +58,11 @@ class ObjectiveAPP(FastAPI):
     if TYPE_CHECKING:
 
         class State(fastapi.datastructures.State):
+            settings: AppSettings
+            initial_scenes: list[schemas.SceneJsonFilePersistence]
+
             engine: AsyncEngine
             session_maker: async_sessionmaker[AsyncSession]
-            settings: AppSettings
 
         state: State
 
