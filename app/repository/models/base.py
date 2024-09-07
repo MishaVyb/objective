@@ -136,11 +136,11 @@ class DeclarativeFieldsMixin(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    created_by: Mapped[uuid.UUID] = mapped_column("user_id", ForeignKey("user.id"))
-    updated_by: Mapped[uuid.UUID | None]  # TODO foreign key
+    created_by_id: Mapped[uuid.UUID] = mapped_column("user_id", ForeignKey("user.id"))
+    updated_by_id: Mapped[uuid.UUID | None]  # TODO foreign key
 
     is_deleted: Mapped[bool] = mapped_column(default=False)
 
     @declared_attr
-    def user(cls) -> Mapped[User]:
+    def created_by(cls) -> Mapped[User]:
         return relationship("User")

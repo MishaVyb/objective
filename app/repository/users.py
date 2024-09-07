@@ -71,4 +71,5 @@ class UserManager(UUIDIDMixin, BaseUserManager[models.User, uuid.UUID]):
         user: models.User,
         request: Request | None = None,
     ):
-        return await self.db.projects.create_default(request)
+        self.db.set_current_user(user)
+        return await self.db.projects.create_default()

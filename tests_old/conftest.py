@@ -198,9 +198,10 @@ TDatabaseContext = Callable[[], _AsyncGeneratorContextManager[DatabaseRepositori
 
 
 @pytest.fixture
-async def database_context(
+async def database_context_no_current_user(
     session_context: TSession,
     settings: AppSettings,
+    app: ObjectiveAPP,
 ) -> TDatabaseContext:
     @asynccontextmanager
     async def context():
@@ -208,8 +209,9 @@ async def database_context(
             yield DatabaseRepositories.construct(
                 session,
                 settings=settings,
+                app=app,
                 logger=logger,
-                current_user=None,
+                current_user=None,  # set later after user creation
             )
 
     return context
@@ -238,14 +240,14 @@ async def users(
     session: AsyncSession,
     mocker: MockerFixture,
     app: ObjectiveAPP,
-    database_context: TDatabaseContext,
+    database_context_no_current_user: TDatabaseContext,
     settings: AppSettings,
 ):
     mock_request = mocker.Mock()
     mock_request.app = app
 
     users = {}
-    async with database_context() as db:
+    async with database_context_no_current_user() as db:
         async with UserManagerContext(db, settings) as user_manager:
             for field in UsersFixture.fields():
                 users[field.name] = await user_manager.create(

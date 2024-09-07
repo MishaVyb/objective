@@ -2,12 +2,11 @@ from dataclasses import dataclass, fields
 from logging import Logger
 from typing import TYPE_CHECKING, Annotated, Never, Self
 
-from fastapi import Depends, Request
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing_extensions import deprecated
 
-from app.applications.objective import ObjectiveAPP
 from app.config import AppSettings
 from app.repository.base.sqlalchemy import (
     CommonSQLAlchemyRepository,
@@ -19,9 +18,11 @@ from . import models, schemas
 from .base.sqlalchemy import SQLAlchemyRepository
 
 if TYPE_CHECKING:
+    from app.applications.objective import ObjectiveAPP
     from app.dependencies.dependencies import AuthenticatedUser
 else:
     AuthenticatedUser = object
+    ObjectiveAPP = object
 
 
 class ProjectRepository(
@@ -58,16 +59,15 @@ class ProjectRepository(
     DEFAULT_SCENE_NAME = "Untitled Scene"
 
     @deprecated("")
-    async def create_default(self, request: Request | None = None):
-        app: ObjectiveAPP = request.app
-        initial = app.state.initial_scenes
+    async def create_default(self) -> schemas.Project:
+        initial = self.app.state.initial_scenes
         scenes = [
             models.Scene(
                 name=scene.app_state.get("name") or self.DEFAULT_SCENE_NAME,
-                user_id=self.user.id,
+                created_by=self.current_user.id,  # ex 'user_id'
                 files=[
                     models.File(
-                        user_id=self.user.id,
+                        created_by=self.current_user.id,  # ex 'user_id'
                         **f.model_dump(),
                     )
                     for f in scene.files.values()
@@ -78,7 +78,7 @@ class ProjectRepository(
         ]
 
         return await self.create(
-            schemas.SceneCreate(name=self.DEFAULT_PROJECT_NAME),
+            schemas.ProjectCreate(name=self.DEFAULT_PROJECT_NAME),
             scenes=scenes,
         )
 
@@ -129,10 +129,15 @@ class DatabaseRepositories:
     # no users repository here as it fails to circular imports
     users: Annotated[UserRepository, Depends()]
 
+    def set_current_user(self, user: models.User):
+        for repo in self.repositories:
+            repo.current_user = user
+
     @classmethod
     def construct(
         cls,
         session: AsyncSession,
+        app: ObjectiveAPP,
         settings: AppSettings,
         logger: Logger,
         current_user: AuthenticatedUser,
@@ -144,6 +149,7 @@ class DatabaseRepositories:
                 field.name: field.type(
                     session=session,
                     storage=storage,
+                    app=app,
                     settings=settings,
                     logger=logger,
                     current_user=current_user,

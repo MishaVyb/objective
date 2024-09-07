@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from starlette import status
 
-from app.dependencies.users import AuthenticatedUserDepends
+from app.dependencies.users import UserDepends
 from app.exceptions import NotFoundInstanceError
 from app.schemas import schemas
 from common.fastapi.monitoring.base import LoggerDepends
@@ -43,7 +43,7 @@ async def get_scene(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_scene(
     db: DatabaseRepositoriesDepends,
-    user: AuthenticatedUserDepends,
+    user: UserDepends,
     *,
     schema: schemas.SceneCreate,
 ) -> schemas.SceneSimplified:
@@ -61,7 +61,7 @@ async def create_scene(
 @router.post("/{scene_id}/copy", status_code=status.HTTP_201_CREATED)
 async def copy_scene(
     db: DatabaseRepositoriesDepends,
-    user: AuthenticatedUserDepends,
+    user: UserDepends,
     *,
     scene_id: UUID,
     schema: schemas.SceneUpdate,  # overrides

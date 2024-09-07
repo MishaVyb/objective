@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Annotated, AsyncGenerator
@@ -12,9 +10,11 @@ from starlette.requests import Request
 if TYPE_CHECKING:
     from app.applications.objective import ObjectiveAPP
     from app.config import AppSettings
+    from app.dependencies.users import CurrentUser
 else:
     ObjectiveAPP = object
     AppSettings = object
+    CurrentUser = object
 
 logger = logging.getLogger(__name__)
 
@@ -56,3 +56,10 @@ SessionDepends = Annotated[AsyncSession, Depends(get_database_session)]
 
 SessionContext = asynccontextmanager(get_database_session)
 """Common database session context. """
+
+
+async def get_request_user(app: ObjectiveAPP) -> CurrentUser:
+    return app.state.current_user
+
+
+RequestUserDepends = Annotated[CurrentUser, Depends(get_request_user)]

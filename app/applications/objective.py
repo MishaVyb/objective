@@ -27,11 +27,25 @@ from common.fastapi.routes import monitoring
 from ..api import projects, scenes, users
 from ..config import AppSettings
 
+if TYPE_CHECKING:
+    from app.dependencies.users import CurrentUser
+
 logger = logging.getLogger(__name__)
+
+
+def setup_initial_scenes(app: ObjectiveAPP) -> list[schemas.SceneJsonFilePersistence]:
+    scenes = []
+    for filepath in app.state.settings.USERS_INITIAL_SCENES:
+        with open(filepath) as file:
+            scene = schemas.SceneJsonFilePersistence.model_validate_json(file.read())
+            scenes.append(scene)
+    app.state.initial_scenes = scenes
 
 
 @asynccontextmanager
 async def lifespan(app: ObjectiveAPP):
+    setup_initial_scenes(app)
+
     # try:
     #     # engine could be already present (at pytest session)
     #     engine = app.state.engine
@@ -61,6 +75,7 @@ class ObjectiveAPP(FastAPI):
             settings: AppSettings
             initial_scenes: list[schemas.SceneJsonFilePersistence]
 
+            current_user: CurrentUser
             engine: AsyncEngine
             session_maker: async_sessionmaker[AsyncSession]
 

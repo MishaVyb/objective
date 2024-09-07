@@ -4,7 +4,7 @@ import uuid
 from typing import Literal, TypeAlias
 
 import fastapi_users
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from common.schemas.base import BaseSchema
 
@@ -101,6 +101,9 @@ class FileCreate(FileExtended, CreateSchemaMixin):
         serialization_alias="file_id",  # to Database
     )
 
+    # BACKWARDS CAPABILITY
+    model_config = ConfigDict(extra="ignore")
+
 
 ########################################################################################
 # scenes
@@ -124,18 +127,19 @@ class SceneExtended(SceneSimplified):
 
 
 class SceneCreate(
-    SceneExtended,
+    SceneSimplified,
     CreateSchemaMixin,
 ):
     files: list[FileCreate] = []  # ???
 
 
 class SceneUpdate(
-    UpdateSchemaMixin,
     SceneExtended,
+    UpdateSchemaMixin,
     #
     # Do not need files here as we add new files to scene by POST .../scene/files/
     exclude={"files"},
+    optional=SceneExtended.model_fields,
 ):
     pass
 

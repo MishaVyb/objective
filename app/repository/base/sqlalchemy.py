@@ -19,7 +19,12 @@ from app.exceptions import (
 from common.fastapi.monitoring.base import LoggerDepends
 from common.schemas.base import PG_INT_ID, BaseSchema, DictModel
 
-from ...dependencies.dependencies import AppSettingsDepends, SessionDepends
+from ...dependencies.dependencies import (
+    AppDepends,
+    AppSettingsDepends,
+    RequestUserDepends,
+    SessionDepends,
+)
 from .. import models
 from .base import AbstractRepository
 
@@ -113,16 +118,17 @@ class SQLAlchemyRepository(
         session: SessionDepends,
         storage: Annotated[StrongInstanceIdentityMap, Depends()],
         logger: LoggerDepends,
+        app: AppDepends,
         settings: AppSettingsDepends,
-        # current_user: AuthenticatedUserDepends,
-        current_user=None,
+        current_user: RequestUserDepends,
     ):
         self.session = session
         self.logger = logger
+        self.app = app
         self.settings = settings
+        self.current_user = current_user
 
         self._storage = RepositoryLocalStorage(self.model, storage)
-        # self.current_user = current_user # TODO from request.state
 
     async def flush(self, ids: list[PG_INT_ID]) -> None:
         # do nothing with StrongInstanceIdentityMap at this point, as sqlalchemy
@@ -444,7 +450,9 @@ class SQLAlchemyRepository(
         # if it's not set explicitly on model creation as empty list
         # (obviously, for just created instance, all its list relationships are empty)
         ensure_empty_list_relationships = {
-            k: [] for k, v in inspect(self.model).relationships.items() if v.uselist
+            k: []
+            for k, v in inspect(self.model).relationships.items()
+            if v.uselist and k not in extra_values
         }
         return self._use_payload(
             payload,
@@ -465,8 +473,8 @@ class SQLAlchemyRepository(
         self,
         payload: _CreateSchemaType | _UpdateSchemaType | None,
         *,
-        created_by_id: PG_INT_ID = _UNSET,
-        updated_by_id: PG_INT_ID = _UNSET,
+        created_by_id: PG_INT_ID,
+        updated_by_id: PG_INT_ID,
         **extra_values,
     ) -> dict:
         if not payload and not extra_values:
@@ -480,16 +488,11 @@ class SQLAlchemyRepository(
         db_fields = set(i.all_orm_descriptors.keys()) - set(i.relationships.keys())
         payload_fields = payload.model_fields_set & db_fields
 
-        # NOTE
-        # the same logic for declarative fields, but it might be overridden by payload
-        # (for example, when creator provided explicitly by request)
         declarative_values = {}
-        if created_by_id is not _UNSET:
-            if "created_by_id" in db_fields:
-                declarative_values["created_by_id"] = created_by_id
-        if updated_by_id is not _UNSET:
-            if "updated_by_id" in db_fields:
-                declarative_values["updated_by_id"] = updated_by_id
+        if "created_by_id" in db_fields:
+            declarative_values["created_by_id"] = created_by_id
+        if "updated_by_id" in db_fields:
+            declarative_values["updated_by_id"] = updated_by_id
 
         payload_values = payload.model_dump(include=payload_fields)
         return declarative_values | payload_values | extra_values
