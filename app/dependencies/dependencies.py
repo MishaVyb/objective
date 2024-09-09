@@ -10,11 +10,11 @@ from starlette.requests import Request
 if TYPE_CHECKING:
     from app.applications.objective import ObjectiveAPP
     from app.config import AppSettings
-    from app.dependencies.users import CurrentUser
+    from app.dependencies.users import AuthenticatedUser
 else:
     ObjectiveAPP = object
     AppSettings = object
-    CurrentUser = object
+    AuthenticatedUser = object
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,18 @@ SessionContext = asynccontextmanager(get_database_session)
 """Common database session context. """
 
 
-async def get_request_user(app: ObjectiveAPP) -> CurrentUser:
-    return app.state.current_user
+class NoAuthenticatedUserStab:
+    pass
 
 
-RequestUserDepends = Annotated[CurrentUser, Depends(get_request_user)]
+# HACK resolve circular imports
+# ✅ user depends -> user repo -> db -> depends -> get current user from request
+# ❌ user depends -> user repo -> db -> depends -> get current user from user depends
+async def get_request_user(request: Request) -> AuthenticatedUser:
+    try:
+        return request.state.authenticated_user
+    except AttributeError:
+        return NoAuthenticatedUserStab()  # type: ignore
+
+
+RequestUserDepends = Annotated[AuthenticatedUser, Depends(get_request_user)]

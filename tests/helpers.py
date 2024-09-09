@@ -290,7 +290,11 @@ async def drop_database(url: URL | str):
 async def create_and_drop_tables_by_metadata(engine: AsyncEngine, metadata: MetaData):
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(metadata.create_all, checkfirst=True)
+
+            def _run(conn: Connection):
+                metadata.create_all(conn, checkfirst=True)
+
+            await conn.run_sync(_run)
         yield
     finally:
         # Tests are using single(!) engine for entire test session,

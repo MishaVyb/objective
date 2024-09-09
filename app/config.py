@@ -41,7 +41,7 @@ class AppSettings(BaseSettings, VerboseModel):
     APP_RELOAD: bool = False
 
     APP_CORS_SETTINGS: dict = {}
-    APP_RAISE_SERVER_EXCEPTIONS: bool = False  # for debugging or/and pytest session
+    APP_RAISE_SERVER_EXCEPTIONS: bool | list[int] = False  # for debugging only
     APP_VERBOSE_EXCEPTIONS: bool = True
 
     API_PREFIX: URL = "/api"
@@ -103,6 +103,7 @@ class AppSettings(BaseSettings, VerboseModel):
         return self.SERVICE_DIR / "alembic.ini"
 
     USERS_SECRET: SecretStr = Field(min_length=10)
+    USERS_TOKEN_LIFETIME: int = 3600 * 24 * 14  # 14 days
 
     @property
     def USERS_INITIAL_SCENES(self) -> list[Path]:

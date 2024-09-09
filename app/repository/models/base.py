@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Annotated, Any, Type
+from typing import TYPE_CHECKING, Annotated, Any, Optional, Type
 
 from pydantic.alias_generators import to_snake
-from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, String, engine, func, types
+from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, String, engine, types
 from sqlalchemy.dialects.sqlite.base import SQLiteDialect
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -70,6 +70,7 @@ class Base(DeclarativeBase):
         datetime: _DateTimeForceTimezone(),
         dict: JSON,
         list: JSON,
+        # uuid.UUID: GUID, # ???
     }
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -126,8 +127,10 @@ class DeclarativeFieldsMixin(Base):
     __abstract__ = True
 
     id: Mapped[uuid.UUID] = mapped_column(
+        # GUID, # ???
         primary_key=True,
-        server_default=func.uuid_generate_v4(),
+        # server_default=func.uuid_generate_v4(),
+        default=lambda: uuid.uuid4(),
     )
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc),
@@ -136,11 +139,33 @@ class DeclarativeFieldsMixin(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    created_by_id: Mapped[uuid.UUID] = mapped_column("user_id", ForeignKey("user.id"))
-    updated_by_id: Mapped[uuid.UUID | None]  # TODO foreign key
+    # ex 'user_id' column
+    created_by_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user.id"),
+        index=True,
+    )
+    updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        default=None,
+        # TODO
+        # ForeignKey("user.id"),
+        # index=True,
+    )
+
+    # OLD
+    # @declared_attr
+    # def created_by(cls) -> Mapped[User]:
+    #     return relationship("User")
+
+    # NEW
+    @declared_attr
+    @classmethod
+    def created_by(cls) -> Mapped[Optional["User"]]:
+        return relationship(foreign_keys=[cls.created_by_id])
+
+    # TODO
+    # @declared_attr
+    # @classmethod
+    # def updated_by(cls) -> Mapped[Optional["User"]]:
+    #     return relationship(foreign_keys=[cls.updated_by_id])
 
     is_deleted: Mapped[bool] = mapped_column(default=False)
-
-    @declared_attr
-    def created_by(cls) -> Mapped[User]:
-        return relationship("User")

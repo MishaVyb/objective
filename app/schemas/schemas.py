@@ -6,14 +6,14 @@ from typing import Literal, TypeAlias
 import fastapi_users
 from pydantic import ConfigDict, Field
 
-from common.schemas.base import BaseSchema
+from common.schemas.base import ITEM_PG_ID, BaseSchema
 
 from .base import CreateSchemaMixin, DeclarativeFieldsMixin, UpdateSchemaMixin
 
 
 class FiltersBase(BaseSchema):
     created_by_id: uuid.UUID | Literal["current_user"] | Literal[""] | None = Field(
-        default="current_user",
+        default=None,
         alias="user_id",
     )
     is_deleted: bool | None = None
@@ -53,17 +53,18 @@ class Project(BaseSchema, DeclarativeFieldsMixin):
     scenes: list[SceneSimplified]
 
 
-class ProjectCreate(
-    Project,
-    CreateSchemaMixin,
-    exclude={"scenes"},
-):
+class ProjectSimplified(Project, DeclarativeFieldsMixin, exclude={"scenes"}):
+    pass
+
+
+class ProjectCreate(Project, CreateSchemaMixin, exclude={"scenes"}):
     pass
 
 
 class ProjectUpdate(
-    ProjectCreate,
+    Project,
     UpdateSchemaMixin,
+    exclude={"scenes"},
     optional=ProjectCreate.model_fields,
 ):
     pass
@@ -81,13 +82,15 @@ FileId: TypeAlias = str
 
 
 class FileSimplified(BaseSchema, DeclarativeFieldsMixin):
-    # id - not needed, using `file_id` for get / post requests
+    # NOTE:
+    # Postgres UUID - not required, using `file_id` for get / post requests
     file_id: FileId = Field(
         description="Excalidraw file id",
+        # alias='id',
         validation_alias="file_id",  # from database
         serialization_alias="id",  # to Excalidraw
     )
-    type: str = Field(alias="mimeType")
+    type: str | None = Field(None, alias="mimeType")
 
 
 class FileExtended(FileSimplified):
@@ -96,6 +99,7 @@ class FileExtended(FileSimplified):
 
 class FileCreate(FileExtended, CreateSchemaMixin):
     file_id: FileId = Field(
+        # alias='id',
         description="Excalidraw file id",
         validation_alias="id",  # from Excalidraw
         serialization_alias="file_id",  # to Database
@@ -112,25 +116,32 @@ class FileCreate(FileExtended, CreateSchemaMixin):
 
 class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     name: str
-    project_id: uuid.UUID
 
     # relations
     files: list[FileSimplified] = []
+    project_id: uuid.UUID  # DEPRECATED self.project should be used
 
 
 class SceneExtended(SceneSimplified):
-    type: str
-    version: int
-    source: str
     elements: list
     app_state: dict = Field(alias="appState")
 
+    # relations:
+    project: ProjectSimplified
 
-class SceneCreate(
-    SceneSimplified,
-    CreateSchemaMixin,
-):
-    files: list[FileCreate] = []  # ???
+    # other (unused)
+    type: str | None = None
+    version: int | None = None
+    source: str | None = None
+
+
+class SceneCreate(SceneExtended, CreateSchemaMixin, exclude={"project"}):
+    elements: list = []
+    app_state: dict = Field(default={}, alias="appState")
+
+    # relations:
+    files: list[FileCreate] = []
+    project: ITEM_PG_ID = Field(alias="project_id")
 
 
 class SceneUpdate(
@@ -141,7 +152,8 @@ class SceneUpdate(
     exclude={"files"},
     optional=SceneExtended.model_fields,
 ):
-    pass
+    # relations
+    project: ITEM_PG_ID = Field(alias="project_id")
 
 
 class SceneFilters(FiltersBase):

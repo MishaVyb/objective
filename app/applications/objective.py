@@ -28,7 +28,7 @@ from ..api import projects, scenes, users
 from ..config import AppSettings
 
 if TYPE_CHECKING:
-    from app.dependencies.users import CurrentUser
+    from app.dependencies.users import AuthenticatedUser
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ async def lifespan(app: ObjectiveAPP):
     app.state.session_maker = async_sessionmaker(
         engine,
         autoflush=True,
-        expire_on_commit=True,
+        expire_on_commit=False,  # FIXME db repos should return Pydantic only
     )
 
     try:
@@ -75,7 +75,7 @@ class ObjectiveAPP(FastAPI):
             settings: AppSettings
             initial_scenes: list[schemas.SceneJsonFilePersistence]
 
-            current_user: CurrentUser
+            current_user: AuthenticatedUser
             engine: AsyncEngine
             session_maker: async_sessionmaker[AsyncSession]
 
@@ -160,10 +160,13 @@ class ObjectiveAPP(FastAPI):
         exc_handlers.setup(app)
 
         # setup routes
-        app.include_router(monitoring.router)
-        app.include_router(users.router)
-        app.include_router(projects.router)
-        app.include_router(scenes.router)
+        prefix = str(settings.API_PREFIX)  # v1
+        app.include_router(monitoring.router, prefix=prefix)
+        app.include_router(users.router, prefix=prefix)
+        app.include_router(projects.router, prefix=prefix)
+        app.include_router(scenes.router, prefix=prefix)
+
+        # v2
 
         # setup openapi at the end after app is fully configured
         openapi_schema = app.openapi()

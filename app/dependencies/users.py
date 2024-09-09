@@ -4,7 +4,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi_users import FastAPIUsers
 from fastapi_users.authentication import (
     AuthenticationBackend,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 else:
     ObjectiveAPP = object
 
-CurrentUser = models.User  # TODO pydantic schema
+AuthenticatedUser = models.User  # TODO pydantic schema
 
 # UNUSED
 # async def get_database_session_no_autocommit(app: AppDepends) -> AsyncGenerator[AsyncSession, None]:
@@ -43,7 +43,6 @@ CurrentUser = models.User  # TODO pydantic schema
 
 
 async def get_user_manager(
-    # user_db: UserRepositoryDepends,
     db: DatabaseRepositoriesDepends,
     settings: AppSettingsDepends,
 ):
@@ -54,10 +53,10 @@ UserManagerDepends = Annotated[UserManager, Depends(get_user_manager)]
 UserManagerContext = asynccontextmanager(get_user_manager)
 
 
-def get_jwt_strategy():
+def get_jwt_strategy(settings: AppSettingsDepends):
     return JWTStrategy(
-        secret=settings.users_secret.get_secret_value(),
-        lifetime_seconds=3600 * 24 * 7,  # 7 days
+        secret=settings.USERS_SECRET.get_secret_value(),
+        lifetime_seconds=settings.USERS_TOKEN_LIFETIME,
     )
 
 
@@ -72,15 +71,20 @@ fastapi_users_api = FastAPIUsers[models.User, uuid.UUID](
 )
 
 
-get_current_active_user = fastapi_users_api.current_user(active=True)
+# wrap original depends to populate Request state:
+
+_get_auth_user = fastapi_users_api.current_user(active=True)
 
 
-async def get_user(
-    app: ObjectiveAPP,
-    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
-) -> CurrentUser:
-    app.state.current_user = current_user
-    return app.state.current_user
+async def get_auth_user(
+    request: Request,
+    db: DatabaseRepositoriesDepends,
+    authenticated_user: Annotated[AuthenticatedUser, Depends(_get_auth_user)],
+) -> AuthenticatedUser:
+    request.state.authenticated_user = authenticated_user
+    db.set_current_user(authenticated_user)
+    return request.state.authenticated_user
 
 
-UserDepends = Annotated[CurrentUser, Depends(get_user)]
+AuthRouterDepends = Depends(get_auth_user)
+AuthUserDepends = Annotated[AuthenticatedUser, Depends(get_auth_user)]

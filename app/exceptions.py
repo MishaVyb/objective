@@ -25,14 +25,12 @@ __all__ = [
 ]
 
 
-class NotFoundInstanceError(BadRequest):
-    status_code = status.HTTP_404_NOT_FOUND
-    msg = "Not found: {}"
+class NotFoundInstanceError(NotFoundError):
+    pass
 
 
-class DeletedInstanceError(BadRequest):
-    status_code = status.HTTP_404_NOT_FOUND
-    msg = "Instance has been marked as deleted: {}"
+class DeletedInstanceError(NotFoundInstanceError):
+    pass
 
 
 ########################################################################################

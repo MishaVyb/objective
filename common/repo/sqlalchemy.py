@@ -1,5 +1,15 @@
 import logging
-from typing import Annotated, Any, Generic, Optional, Sequence, Type, TypeVar
+import uuid
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Generic,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+)
 
 from fastapi import Depends
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -8,6 +18,12 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.identity import WeakInstanceDict
 from sqlalchemy.orm.interfaces import ORMOption
 
+from app.dependencies.dependencies import (
+    AppDepends,
+    AppSettingsDepends,
+    RequestUserDepends,
+    SessionDepends,
+)
 from app.exceptions import (
     DeletedInstanceError,
     ExpireMissingInstanceError,
@@ -16,31 +32,26 @@ from app.exceptions import (
     NotFoundInstanceError,
     RefreshModifiedInstanceError,
 )
+from app.schemas.base import CreateSchemaMixin, UpdateSchemaMixin
 from common.fastapi.monitoring.base import LoggerDepends
-from common.schemas.base import PG_INT_ID, BaseSchema, DictModel
+from common.schemas.base import BaseSchema, DictModel
 
-from ...dependencies.dependencies import (
-    AppDepends,
-    AppSettingsDepends,
-    RequestUserDepends,
-    SessionDepends,
-)
-from .. import models
 from .base import AbstractRepository
+
+if TYPE_CHECKING:
+    from app.repository.models import DeclarativeFieldsMixin
+else:
+    DeclarativeFieldsMixin = object
 
 logger = logging.getLogger(__name__)
 
-GLOBAL_REFS = []
-
-
-_ModelType = TypeVar("_ModelType", bound=models.DeclarativeFieldsMixin)
+_ModelType = TypeVar("_ModelType", bound=DeclarativeFieldsMixin)
 _SchemaType = TypeVar("_SchemaType", bound=BaseModel)
-_CreateSchemaType = TypeVar("_CreateSchemaType", bound=BaseModel)
-_UpdateSchemaType = TypeVar("_UpdateSchemaType", bound=BaseModel)
+_CreateSchemaType = TypeVar("_CreateSchemaType", bound=CreateSchemaMixin)
+_UpdateSchemaType = TypeVar("_UpdateSchemaType", bound=UpdateSchemaMixin)
 _IdentityKeyType = tuple[Type[_ModelType], tuple[Any, ...], Optional[Any]]
 
 _CLASS_DEFAULT: Any = object()
-_UNSET: Any = object()
 
 
 class StrongInstanceIdentityMap(Generic[_ModelType]):
@@ -83,18 +94,18 @@ class RepositoryLocalStorage(Generic[_ModelType]):
         self._ref = ref
         self._model = model
 
-    def key(self, pk: PG_INT_ID) -> _IdentityKeyType[_ModelType]:
+    def key(self, pk: uuid.UUID) -> _IdentityKeyType[_ModelType]:
         return self._ref.key(self._model, pk)
 
     def add(self, instance: _ModelType) -> None:
         key = self._ref.key(self._model, instance.id)
         self._ref.add(key, instance)
 
-    def has(self, pk: PG_INT_ID) -> bool:
+    def has(self, pk: uuid.UUID) -> bool:
         key = self.key(pk)
         return self._ref.has(key)
 
-    def get(self, pk: PG_INT_ID) -> _ModelType | None:
+    def get(self, pk: uuid.UUID) -> _ModelType | None:
         key = self.key(pk)
         return self._ref.get(key)
 
@@ -120,7 +131,7 @@ class SQLAlchemyRepository(
         logger: LoggerDepends,
         app: AppDepends,
         settings: AppSettingsDepends,
-        current_user: RequestUserDepends,
+        current_user: RequestUserDepends,  # REMOVE
     ):
         self.session = session
         self.logger = logger
@@ -130,7 +141,7 @@ class SQLAlchemyRepository(
 
         self._storage = RepositoryLocalStorage(self.model, storage)
 
-    async def flush(self, ids: list[PG_INT_ID]) -> None:
+    async def flush(self, ids: list[uuid.UUID]) -> None:
         # do nothing with StrongInstanceIdentityMap at this point, as sqlalchemy
         # does everything we need with instances that already present at our storage
         if not ids:
@@ -143,7 +154,7 @@ class SQLAlchemyRepository(
             instances.append(inst)
         await self.session.flush(instances)
 
-    def expire(self, ids: list[PG_INT_ID]) -> None:
+    def expire(self, ids: list[uuid.UUID]) -> None:
         # does not remove instance from cache, but expire all its attributes
         if not ids:
             raise ValueError
@@ -153,7 +164,7 @@ class SQLAlchemyRepository(
                 raise ExpireMissingInstanceError(self, pk)
             self.session.expire(inst)
 
-    async def exist(self, pk: PG_INT_ID) -> bool:
+    async def exist(self, pk: uuid.UUID) -> bool:
         exists_criteria = select(1).where(self.model.id == pk).exists()
         result = await self.session.execute(select(exists_criteria))
         return bool(result.scalar())
@@ -167,7 +178,7 @@ class SQLAlchemyRepository(
 
     async def get(
         self,
-        pk: PG_INT_ID,
+        pk: uuid.UUID,
         *,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         refresh: bool = False,
@@ -218,8 +229,10 @@ class SQLAlchemyRepository(
 
     async def _get_instance(
         self,
-        pk: PG_INT_ID,
+        pk: uuid.UUID,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        *,
+        including_deleted: bool = False,
     ) -> _ModelType:
         if inst := self._storage.get(pk):
             self.logger.debug(
@@ -239,8 +252,8 @@ class SQLAlchemyRepository(
         try:
             instance = await self.session.get_one(self.model, pk, options=options)
         except exc.NoResultFound:
-            raise NotFoundInstanceError(pk)
-        if instance.is_deleted:
+            raise NotFoundInstanceError(str(pk))
+        if instance.is_deleted and not including_deleted:
             raise DeletedInstanceError(str(instance))
 
         self.logger.debug("[DATABASE] Got: %s", instance)
@@ -249,7 +262,7 @@ class SQLAlchemyRepository(
 
     async def _get_instance_refresh(
         self,
-        pk: PG_INT_ID,
+        pk: uuid.UUID,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
     ) -> _ModelType:
         self.logger.debug(
@@ -307,7 +320,7 @@ class SQLAlchemyRepository(
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         is_deleted: bool = False,
         **extra_filters,
-    ):
+    ) -> list[_SchemaType]:
         stm = self._use_statement_get_instances_list(
             filter_=filter_,
             options=options,
@@ -330,9 +343,9 @@ class SQLAlchemyRepository(
         self.logger.debug("[DATABASE] Querying %r %s. ", self, filters)
         stm = (
             select(self.model)
-            .filter_by(is_deleted=is_deleted, **filters)
+            .filter_by(**filters)
             .options(*options)
-            .order_by(self.model.id)
+            .order_by(self.model.created_at)  # VBRN
         )
         return stm
 
@@ -362,7 +375,7 @@ class SQLAlchemyRepository(
         self.logger.debug("[DATABASE] Add: %s", instance)
         self.session.add(instance)
 
-        # for creation flush always required as PG_INT_ID should be populated from db
+        # for creation flush always required as uuid.UUID should be populated from db
         self.logger.debug("[DATABASE] Flush: %s", instance)
         await self.session.flush([instance])
 
@@ -383,15 +396,19 @@ class SQLAlchemyRepository(
 
     async def update(
         self,
-        pk: PG_INT_ID,
-        payload: _UpdateSchemaType | None,
+        pk: uuid.UUID,
+        payload: _UpdateSchemaType | None = None,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         flush: bool = False,
         # refresh: bool = False # TODO
         **extra_values,
     ) -> _SchemaType:
         data = self._use_payload_update(payload, **extra_values)
-        instance = await self._get_instance(pk, options)
+        instance = await self._get_instance(
+            pk,
+            options,
+            including_deleted=payload.is_update_recover if payload else False,
+        )
         if not data:
             return self._use_result(instance)
 
@@ -406,8 +423,8 @@ class SQLAlchemyRepository(
 
     async def pending_update(
         self,
-        pk: PG_INT_ID,
-        payload: _UpdateSchemaType | None,
+        pk: uuid.UUID,
+        payload: _UpdateSchemaType | None = None,
         **extra_values,
     ) -> None:
         """Like `update(..., flush=False)` but without returning."""
@@ -420,7 +437,7 @@ class SQLAlchemyRepository(
         for k, v in data.items():
             setattr(instance, k, v)
 
-    async def delete(self, pk: PG_INT_ID, flush: bool = False) -> None:
+    async def delete(self, pk: uuid.UUID, flush: bool = False) -> None:
         instance = await self._get_instance(pk)
 
         self.logger.debug("[DATABASE] Delete: %s", instance)
@@ -457,7 +474,6 @@ class SQLAlchemyRepository(
         return self._use_payload(
             payload,
             created_by_id=self.current_user.id,
-            updated_by_id=_UNSET,
             **extra_values,
             **ensure_empty_list_relationships,
         )
@@ -472,9 +488,6 @@ class SQLAlchemyRepository(
     def _use_payload(
         self,
         payload: _CreateSchemaType | _UpdateSchemaType | None,
-        *,
-        created_by_id: PG_INT_ID,
-        updated_by_id: PG_INT_ID,
         **extra_values,
     ) -> dict:
         if not payload and not extra_values:
@@ -487,21 +500,16 @@ class SQLAlchemyRepository(
         i = inspect(self.model)
         db_fields = set(i.all_orm_descriptors.keys()) - set(i.relationships.keys())
         payload_fields = payload.model_fields_set & db_fields
-
-        declarative_values = {}
-        if "created_by_id" in db_fields:
-            declarative_values["created_by_id"] = created_by_id
-        if "updated_by_id" in db_fields:
-            declarative_values["updated_by_id"] = updated_by_id
-
         payload_values = payload.model_dump(include=payload_fields)
-        return declarative_values | payload_values | extra_values
+        return payload_values | extra_values
 
     def _use_filter(self, filter_: BaseSchema | None, **extra_filters) -> dict:
         if not filter_:
-            return extra_filters
-        data = filter_.model_dump(exclude_unset=True)
-        return data | extra_filters
+            result_filters = extra_filters
+        else:
+            result_filters = filter_.model_dump(exclude_unset=True) | extra_filters
+
+        return result_filters
 
     def _use_result(
         self, instance: _ModelType, *, adapter: TypeAdapter[_SchemaType] | None = None

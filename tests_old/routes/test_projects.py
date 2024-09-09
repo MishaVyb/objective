@@ -69,7 +69,11 @@ async def test_project_crud(client: AsyncClient) -> None:
     # [3] update
     response = await client.patch(
         f"/api/projects/{id}",
-        json=dict(schemas.ProjectUpdate(name="new-name")),
+        json=schemas.ProjectUpdate(name="new-name").model_dump(
+            by_alias=True,
+            exclude_unset=True,
+            mode="json",
+        ),
     )
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
@@ -90,7 +94,7 @@ async def test_project_crud(client: AsyncClient) -> None:
     response = await client.get(f"/api/projects")
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
-    assert len(json) == 1  # only deleted
+    assert len(json) == 1  # only not deleted
 
     response = await client.get(f"/api/projects", params={"is_deleted": True})
     assert response.status_code == status.HTTP_200_OK, verbose(response)
@@ -107,7 +111,11 @@ async def test_project_crud(client: AsyncClient) -> None:
     # [5] recover
     response = await client.patch(
         f"/api/projects/{id}",
-        json=dict(schemas.ProjectUpdate(is_deleted=False)),
+        json=schemas.ProjectUpdate(is_deleted=False).model_dump(
+            by_alias=True,
+            exclude_unset=True,
+            mode="json",
+        ),
     )
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()

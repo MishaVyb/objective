@@ -10,7 +10,7 @@ from .users import User
 
 
 class Project(DeclarativeFieldsMixin):
-    name: Mapped[str | None]
+    name: Mapped[str]
 
     # relations:
     scenes: Mapped[list[Scene]] = relationship(
@@ -34,6 +34,7 @@ class Scene(DeclarativeFieldsMixin):
     type: Mapped[str | None]
     version: Mapped[int | None]
     source: Mapped[str | None]  # app url
+
     elements: Mapped[list] = mapped_column(default=[])
     app_state: Mapped[dict] = mapped_column(default={})
 
@@ -60,6 +61,6 @@ class File(DeclarativeFieldsMixin):
 
 # Postponed relations definition
 # https://docs.sqlalchemy.org/en/20/orm/basic_relationships.html#adding-relationships-to-mapped-classes-after-declaration
-User.projects = relationship("Project", back_populates="user", uselist=True)
-User.scenes = relationship("Scene", back_populates="user", uselist=True)
-User.files = relationship("File", back_populates="user", uselist=True)
+User.projects = relationship("Project", back_populates="created_by", uselist=True)
+User.scenes = relationship("Scene", back_populates="created_by", uselist=True)
+User.files = relationship("File", back_populates="created_by", uselist=True)

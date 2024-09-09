@@ -55,6 +55,7 @@ class ExceptionsHandlersBase:
         self.custom_encoder = self.DEFAULT_ENCODER | (custom_encoder or {})
         self.headers = headers
 
+        self.raise_server_exceptions: Literal["*"] | list[int]
         if raise_server_exceptions is True:
             self.raise_server_exceptions = "*"
         else:

@@ -1,8 +1,8 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, TypeVar
 
 import yarl
-from annotated_types import Interval
 from fastapi.encoders import jsonable_encoder
 from pydantic import (
     AfterValidator,
@@ -24,15 +24,7 @@ class BaseSchema(ModelConstructor):
     model_config = ConfigDict(
         from_attributes=True,
         extra="forbid",
-        #
-        # HACK: temporally workaround to support mypy for ModelConstructor
-        # TODO: implement custom mypy plugin as pydantic.mypy does
-        #
-        # it makes all fields Optional for mypy checking and suppress errors, when some
-        # fields are excluded
-        # https://docs.pydantic.dev/latest/integrations/mypy/#mypy-plugin-capabilities
-        alias_generator=lambda s: s,
-        populate_by_name=False,
+        populate_by_name=True,
     )
 
     def __str__(self) -> str:
@@ -56,14 +48,7 @@ def _get_id(item: Any):
     return item
 
 
-SEQ_ID_MIN = 1
-SEQ_ID_MAX = 2_147_483_647
-PG_INT_ID = Annotated[int, Interval(ge=SEQ_ID_MIN, le=SEQ_ID_MAX)]
-
-ITEM_PG_ID = Annotated[
-    PG_INT_ID,
-    BeforeValidator(_get_id),
-]
+ITEM_PG_ID = Annotated[uuid.UUID, BeforeValidator(_get_id)]
 """Helper Pydantic type with validator to extract `id` from dict or arbitrary type. """
 
 

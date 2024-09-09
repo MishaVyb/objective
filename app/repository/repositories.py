@@ -1,21 +1,29 @@
 from dataclasses import dataclass, fields
 from logging import Logger
-from typing import TYPE_CHECKING, Annotated, Never, Self
+from typing import TYPE_CHECKING, Annotated, Generic, Never, Self, Sequence
+from uuid import UUID
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm.interfaces import ORMOption
 from typing_extensions import deprecated
 
 from app.config import AppSettings
-from app.repository.base.sqlalchemy import (
-    CommonSQLAlchemyRepository,
-    StrongInstanceIdentityMap,
-)
 from app.repository.users import UserRepository
+from common.fastapi.exceptions.exceptions import NotEnoughRights
+from common.repo.sqlalchemy import (
+    _CLASS_DEFAULT,
+    CommonSQLAlchemyRepository,
+    SQLAlchemyRepository,
+    StrongInstanceIdentityMap,
+    _CreateSchemaType,
+    _ModelType,
+    _SchemaType,
+    _UpdateSchemaType,
+)
 
 from . import models, schemas
-from .base.sqlalchemy import SQLAlchemyRepository
 
 if TYPE_CHECKING:
     from app.applications.objective import ObjectiveAPP
@@ -25,8 +33,53 @@ else:
     ObjectiveAPP = object
 
 
+# NOTE: Specific for Objective service only (not common)
+# TODO move to service
+class RepositoryBase(
+    SQLAlchemyRepository,
+    Generic[_ModelType, _SchemaType, _CreateSchemaType, _UpdateSchemaType],
+):
+    def _use_filter(self, filter_: schemas.FiltersBase | None, **extra_filters) -> dict:
+        if filter_:
+
+            # default filters:
+            if "is_deleted" not in filter_.model_fields_set:
+                filter_.is_deleted = False
+            if "created_by_id" not in filter_.model_fields_set:
+                filter_.created_by_id = self.current_user.id
+
+            # filters modifications:
+            if filter_.created_by_id == "":
+                filter_ = filter_.model_remake(_self_exclude={"created_by_id"})
+            if filter_.created_by_id == "current_user":
+                filter_.created_by_id = self.current_user.id
+
+        return super()._use_filter(filter_, **extra_filters)
+
+    async def update(
+        self,
+        pk: UUID,
+        payload: _UpdateSchemaType | None = None,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        flush: bool = False,
+        **extra_values,
+    ) -> _SchemaType:
+
+        # check rights
+        res = await super().update(pk, payload, options, flush, **extra_values)
+        if self.current_user.id != res.created_by_id:
+            raise NotEnoughRights(f"Not enough rights to update: {res}")
+
+        return res
+
+    async def pending_update(
+        self, pk: UUID, payload: _UpdateSchemaType | None = None, **extra_values
+    ) -> None:
+        raise NotImplementedError
+
+
 class ProjectRepository(
-    SQLAlchemyRepository[
+    RepositoryBase[
         models.Project,
         schemas.Project,
         schemas.ProjectCreate,
@@ -36,7 +89,7 @@ class ProjectRepository(
     model = models.Project
     schema = schemas.Project
 
-    class Loading(SQLAlchemyRepository.Loading):
+    class Loading(RepositoryBase.Loading):
         default = [
             #
             # scenes
@@ -64,10 +117,10 @@ class ProjectRepository(
         scenes = [
             models.Scene(
                 name=scene.app_state.get("name") or self.DEFAULT_SCENE_NAME,
-                created_by=self.current_user.id,  # ex 'user_id'
+                created_by_id=self.current_user.id,  # ex 'user_id' # TODO
                 files=[
                     models.File(
-                        created_by=self.current_user.id,  # ex 'user_id'
+                        created_by_id=self.current_user.id,  # ex 'user_id' # TODO
                         **f.model_dump(),
                     )
                     for f in scene.files.values()
@@ -84,18 +137,19 @@ class ProjectRepository(
 
 
 class SceneRepository(
-    SQLAlchemyRepository[
+    RepositoryBase[
         models.Scene,
-        schemas.SceneSimplified,
         schemas.SceneExtended,
-        schemas.SceneExtended,
+        schemas.SceneCreate,
+        schemas.SceneUpdate,
     ],
 ):
     model = models.Scene
-    schema = schemas.SceneSimplified
+    schema = schemas.SceneExtended
 
-    class Loading(SQLAlchemyRepository.Loading):
+    class Loading(RepositoryBase.Loading):
         default = [
+            joinedload(models.Scene.project),
             #
             # files simplified
             selectinload(models.Scene.files).load_only(
@@ -106,15 +160,15 @@ class SceneRepository(
 
 
 class FileRepository(
-    SQLAlchemyRepository[
+    RepositoryBase[
         models.File,
-        schemas.FileSimplified,
+        schemas.FileExtended,
         schemas.FileCreate,
         Never,
     ],
 ):
     model = models.File
-    schema = schemas.FileSimplified
+    schema = schemas.FileExtended
 
 
 @dataclass(kw_only=True)
@@ -125,8 +179,6 @@ class DatabaseRepositories:
     scenes: Annotated[SceneRepository, Depends()]
     files: Annotated[FileRepository, Depends()]
 
-    # NOTE
-    # no users repository here as it fails to circular imports
     users: Annotated[UserRepository, Depends()]
 
     def set_current_user(self, user: models.User):
@@ -145,17 +197,21 @@ class DatabaseRepositories:
         # storage shared between all repositories for single session
         storage = StrongInstanceIdentityMap(session)
         return cls(
+            # SQLAlchemyRepositories:
             **{
                 field.name: field.type(
                     session=session,
                     storage=storage,
+                    logger=logger,
                     app=app,
                     settings=settings,
-                    logger=logger,
                     current_user=current_user,
                 )
                 for field in fields(cls)
-            }
+                if field.name != "users"
+            },
+            # other:
+            users=UserRepository(session=session),
         )
 
     @property

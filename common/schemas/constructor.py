@@ -16,19 +16,27 @@ class _PydanticInitSubclassKwargs(TypedDict):
     optional: typing.NotRequired[set[str]]
     required: typing.NotRequired[set[str]]
 
+    # TODO move to separate module/class
     as_query: typing.NotRequired[bool]
     """
-    Makes Pydantic schema behaves like FastAPI Query dependency at path operation function.
-    Usage::
+    Make schema works as `fastapi.Query` dependency. Usage::
 
-        class GetUsersQuery(ModelConstructor, as_query=True):
-            limit: int = Field(...)
+        class Params(BaseModel):
+            foo: int | None = None
+            bar: str | None = None
+            ...
 
-        @app.get("/users")
-        async def get_users_roles(
-            query: Annotated[GetUsersQuery, Depends()], # specify it as dependency here!
+        class _ParamsAsQuery(Params, as_query=True):
+            pass
+
+        @app.get("/")
+        async def get(
+
+            # NOTE: schema must be specified as Dependency here
+            query: Annotated[_ParamsAsQuery, Depends()]
         ):
             ...
+
     """
 
 
@@ -42,19 +50,19 @@ def _merge_model_constructor_kwargs(
         include=set(parent.get("include", {})),
         optional=set(parent.get("optional", {})),
         required=set(parent.get("required", {})),
-        as_query=parent.get("as_query"),
+        as_query=parent.get("as_query", False),
     )
     child = _PydanticInitSubclassKwargs(
         exclude=set(child.get("exclude", {})),
         include=set(child.get("include", {})),
         optional=set(child.get("optional", {})),
         required=set(child.get("required", {})),
-        as_query=child.get("as_query"),
+        as_query=child.get("as_query", False),
     )
 
     def _merge_exclusive_options(k: str, priority: str):
         # child opposite option take priority over parent
-        return child[k] | {f for f in parent[k] if f not in child[priority]}
+        return child[k] | {f for f in parent[k] if f not in child[priority]}  # type: ignore
 
     merged = _PydanticInitSubclassKwargs(
         exclude=_merge_exclusive_options("exclude", "include"),
@@ -144,12 +152,12 @@ def _rebuild_model_as_query_dependency(cls: Type[BaseModel]):
             default_factory=field.default_factory,
             alias=field.alias,
             alias_priority=field.alias_priority,
-            validation_alias=field.validation_alias,
+            validation_alias=field.validation_alias,  # type: ignore
             serialization_alias=field.serialization_alias,
             title=field.title,
             description=field.description,
-            json_schema_extra=field.json_schema_extra,
-            **meta_kwargs,
+            json_schema_extra=field.json_schema_extra,  # type: ignore
+            **meta_kwargs,  # type: ignore
         )
         param = inspect.Parameter(
             name=fieldname,
@@ -173,11 +181,12 @@ class ModelConstructor(BaseModel):
         class User(ModelConstructor):
             id: int
             name: str
+            email: str
 
-        class UserCreate(User, exclude={"id"}, optional={"name"})
+        class UserCreate(User, exclude={"id"}, optional={"email"})
             pass
 
-    Or as `fastapi.Query` dependency::
+    Or build schemas as `fastapi.Query` dependency::
 
         class Params(BaseModel):
             foo: int | None = None
@@ -188,10 +197,14 @@ class ModelConstructor(BaseModel):
             pass
 
         @app.get("/")
-        async def get(query: Annotated[_ParamsAsQuery, Depends()]):
+        async def get(
+
+            # NOTE: schema must be specified as Dependency here
+            query: Annotated[_ParamsAsQuery, Depends()]
+        ):
             ...
 
-    And other convenient model instance construct methods.
+    And other convenient model instance construct methods: `model_build` and `model_remake`
     """
 
     __pydantic_init_subclass_kwargs__: ClassVar[_PydanticInitSubclassKwargs]
@@ -209,7 +222,7 @@ class ModelConstructor(BaseModel):
     ):
         super().__pydantic_init_subclass__(**kwargs)
 
-        cls.__pydantic_init_subclass_kwargs__ = kwargs  # type: ignore
+        cls.__pydantic_init_subclass_kwargs__ = kwargs
 
         # collect init subclass kwargs from mro and merge with current kwargs:
 
@@ -228,16 +241,16 @@ class ModelConstructor(BaseModel):
         as_query = kwargs.get("as_query", False)
 
         fieldnames = set(cls.model_fields)
-        exc = ValueError(f"Invalid '{cls.__module__}.{cls.__name__}' declaration. ")
+        msg = f"Invalid '{cls.__module__}.{cls.__name__}' declaration. "
         if i := optional & required:
-            exc.add_note(f"Fields interaction in 'optional' and 'required': {i}")
-            raise exc
+            msg += f"Fields interaction in 'optional' and 'required': {i}"
+            raise ValueError(msg)
         if i := exclude - fieldnames:
-            exc.add_note(f"Invalid fields in 'exclude': {i}")
-            raise exc
+            msg += f"Invalid fields in 'exclude': {i}"
+            raise ValueError(msg)
         if i := include - fieldnames:
-            exc.add_note(f"Invalid fields in 'include' option: {i}")
-            raise exc
+            msg += f"Invalid fields in 'include' option: {i}"
+            raise ValueError(msg)
 
         # rebuild model:
 
@@ -269,6 +282,7 @@ class ModelConstructor(BaseModel):
         except ValidationError as e:
             if as_query:
                 raise RequestValidationError(e.errors())
+            __tracebackhide__ = True
             raise e
 
     @classmethod
@@ -285,6 +299,9 @@ class ModelConstructor(BaseModel):
         """
         Construct self from other schema with extra values / overrides.
 
+        :param payload: Reference schema to constrict from.
+        :param extra_values: Any extra field values. Not `model_fields` keys are omitted.
+
         NOTE:
         Includes only fields declared by self model, that satisfy extra='forbid' option.
         But it might include extra fields from **nested** models. To handle extra values
@@ -296,8 +313,11 @@ class ModelConstructor(BaseModel):
         any validation. If nested field passed as dictionary, it won't be transformed
         into a nested model object, that breaks down the whole schema transformation logic.
         """
+        extra_values = {k: v for k, v in extra_values.items() if k in cls.model_fields}
         if not payload:
-            return
+            if not extra_values:
+                return None  # type: ignore
+            return cls(**extra_values)
 
         include = set(cls.model_fields)
         if _payload_exclude_unset:

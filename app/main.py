@@ -63,7 +63,7 @@ def main() -> None:
     logger.debug("Settings: %s", settings)
 
     uvicorn.run(
-        "app.main:get_app",
+        "app.main:setup",
         host=settings.APP_HOST,
         port=settings.APP_PORT,
         workers=settings.APP_WORKERS,

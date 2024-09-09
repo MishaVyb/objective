@@ -2,6 +2,7 @@ import uuid
 from pprint import pprint
 
 import pytest
+from dirty_equals import IsPartialDict
 from fastapi import FastAPI
 from httpx import AsyncClient
 from starlette import status
@@ -34,7 +35,7 @@ async def test_scene_crud(
         content=schemas.SceneCreate(
             name="test-scene",
             project_id=project_id,
-        ).model_dump_json(),
+        ).model_dump_json(exclude_unset=True, by_alias=True),
     )
     assert response.status_code == status.HTTP_201_CREATED, verbose(response)
     json = response.json()
@@ -74,7 +75,11 @@ async def test_scene_crud(
     # [3] update simple
     response = await client.patch(
         f"/api/scenes/{scene_id}",
-        json=dict(schemas.SceneUpdate(name="new-name")),
+        json=schemas.SceneUpdate(name="new-name").model_dump(
+            exclude_unset=True,
+            by_alias=True,
+            mode="json",
+        ),
     )
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
@@ -82,14 +87,32 @@ async def test_scene_crud(
 
     assert json["name"] == "new-name"
 
-    # [3.1] update full
-    json = json | scene_update_request_body
-    response = await client.patch(f"/api/scenes/{scene_id}", json=json)
+    # [3.1] update full and move to another project
+    response = await client.patch(
+        f"/api/scenes/{scene_id}",
+        json=schemas.SceneUpdate(
+            elements=["element"],
+            app_state={"key": "value"},
+            type="type",
+            version=123,
+            source="source",
+            project=str(another_project_id),
+        ).model_dump(exclude_unset=True, by_alias=True, mode="json"),
+    )
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     json = response.json()
 
     assert json["elements"]
     assert json["appState"]
+
+    # move back
+    response = await client.patch(
+        f"/api/scenes/{scene_id}",
+        json=schemas.SceneUpdate(
+            project=str(project_id),
+        ).model_dump(exclude_unset=True, by_alias=True, mode="json"),
+    )
+    assert response.status_code == status.HTTP_200_OK, verbose(response)
 
     # [3.3] update partial
     data = {"elements": [{"type": "some-element-type"}]}
@@ -211,7 +234,7 @@ async def test_scene_crud_with_files(
                     data="dataURL",
                 ),
             ],
-        ).model_dump_json(),
+        ).model_dump_json(exclude_unset=True, by_alias=True),
     )
     assert response.status_code == status.HTTP_201_CREATED, verbose(response)
     scene = response.json()
@@ -227,8 +250,9 @@ async def test_scene_crud_with_files(
     assert scene["appState"] == {"key": "value"}
     assert scene["elements"] == [{"type": "some-element-type"}]
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
     ]
+    assert "dataURL" not in scene["files"][0]
 
     # [2] create file
     file_id = "new-file-id"
@@ -245,7 +269,7 @@ async def test_scene_crud_with_files(
     )
     assert response.status_code == status.HTTP_201_CREATED, verbose(response)
     file = response.json()
-    assert file == {"id": "new-file-id", "mimeType": "mimeType"}
+    assert file == IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"})
 
     # [3] read at scene
     response = await client.get(f"/api/scenes/{scene_id}")
@@ -253,8 +277,8 @@ async def test_scene_crud_with_files(
     scene = response.json()
 
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
+        IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"}),
     ]
 
     # [3.1] read directly
@@ -262,7 +286,9 @@ async def test_scene_crud_with_files(
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     file = response.json()
 
-    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
+    assert file == IsPartialDict(
+        {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
+    )
 
     ##################################################
     # [4] copy scene to new project
@@ -270,7 +296,11 @@ async def test_scene_crud_with_files(
     # create new project
     response = await client.post(
         "/api/projects",
-        json=dict(schemas.ProjectCreate(name="test-project")),
+        json=schemas.ProjectCreate(name="test-project").model_dump(
+            exclude_unset=True,
+            by_alias=True,
+            mode="json",
+        ),
     )
     assert response.status_code == status.HTTP_201_CREATED, verbose(response)
     project_id = response.json()["id"]
@@ -281,7 +311,7 @@ async def test_scene_crud_with_files(
         json=schemas.SceneCreate(
             project_id=project_id,
             name="copied",
-        ).model_dump(mode="json", exclude_unset=True),
+        ).model_dump(mode="json", exclude_unset=True, by_alias=True),
     )
     assert response.status_code == status.HTTP_201_CREATED, verbose(response)
     scene = response.json()
@@ -292,8 +322,8 @@ async def test_scene_crud_with_files(
     assert scene["name"] == "copied"
     # NOTE: the same file ids, but it's another record in database as it stored under ../scene_id/file_id
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
+        IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"}),
     ]
 
     copied_scene_id = scene["id"]
@@ -305,8 +335,8 @@ async def test_scene_crud_with_files(
 
     assert scene["name"] == "copied"
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
+        IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"}),
     ]
 
     # read by id
@@ -318,15 +348,17 @@ async def test_scene_crud_with_files(
     assert scene["appState"] == {"key": "value"}  # the same app state
     assert scene["elements"] == [{"type": "some-element-type"}]  # the same elements
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
+        IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"}),
     ]
 
     # check file also copied
     response = await client.get(f"/api/scenes/{copied_scene_id}/files/{file_id}")
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     file = response.json()
-    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
+    assert file == IsPartialDict(
+        {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
+    )
 
     ##################################################
     # [5] copy scene to ANOTHER user's project
@@ -341,7 +373,7 @@ async def test_scene_crud_with_files(
         json=schemas.SceneCreate(
             project_id=project_id,
             name="copied-to-another-user",
-        ).model_dump(mode="json", exclude_unset=True),
+        ).model_dump(mode="json", exclude_unset=True, by_alias=True),
     )
     assert response.status_code == status.HTTP_201_CREATED, verbose(response)
     scene = response.json()
@@ -351,8 +383,8 @@ async def test_scene_crud_with_files(
     assert scene["user_id"] == str(another_user.id)
     assert scene["name"] == "copied-to-another-user"
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
+        IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"}),
     ]
 
     copied_scene_id = scene["id"]
@@ -365,8 +397,8 @@ async def test_scene_crud_with_files(
     assert scene["user_id"] == str(another_user.id)
     assert scene["name"] == "copied-to-another-user"
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
+        IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"}),
     ]
 
     # read by id
@@ -379,8 +411,8 @@ async def test_scene_crud_with_files(
     assert scene["appState"] == {"key": "value"}  # the same app state
     assert scene["elements"] == [{"type": "some-element-type"}]  # the same elements
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
+        IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"}),
     ]
 
     # check file also copied
@@ -389,7 +421,9 @@ async def test_scene_crud_with_files(
     )
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     file = response.json()
-    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
+    assert file == IsPartialDict(
+        {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
+    )
 
     ##################################################
     # [6] final check: original scene files was not affected (!)
@@ -401,12 +435,14 @@ async def test_scene_crud_with_files(
     assert scene["user_id"] == str(user.id)
     assert scene["name"] == "test-scene"
     assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+        IsPartialDict({"id": "initial-file-id", "mimeType": "mimeType"}),
+        IsPartialDict({"id": "new-file-id", "mimeType": "mimeType"}),
     ]
 
     # check get original file
     response = await client.get(f"/api/scenes/{scene_id}/files/{file_id}")
     assert response.status_code == status.HTTP_200_OK, verbose(response)
     file = response.json()
-    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
+    assert file == IsPartialDict(
+        {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
+    )

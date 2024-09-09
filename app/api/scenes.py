@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from starlette import status
 
-from app.dependencies.users import UserDepends
+from app.dependencies.users import AuthRouterDepends, AuthUserDepends
 from app.exceptions import NotFoundInstanceError
 from app.schemas import schemas
 from common.fastapi.monitoring.base import LoggerDepends
@@ -13,7 +13,7 @@ from common.fastapi.monitoring.base import LoggerDepends
 from ..repository import models
 from ..repository.repositories import DatabaseRepositoriesDepends
 
-router = APIRouter(prefix="/scenes", tags=["Scenes"])
+router = APIRouter(prefix="/scenes", tags=["Scenes"], dependencies=[AuthRouterDepends])
 
 
 class _SceneFiltersQuery(schemas.SceneFilters, as_query=True):
@@ -27,7 +27,7 @@ async def get_scenes(
     filters: Annotated[_SceneFiltersQuery, Depends()],
 ) -> list[schemas.SceneExtended]:
     """Get scenes. Apply filters."""
-    scenes = await db.scenes.get_many(filters)
+    scenes = await db.scenes.get_filter(filters)
     return [scene for scene in scenes if not scene.project.is_deleted]  # TMP
 
 
@@ -37,47 +37,41 @@ async def get_scene(
     *,
     scene_id: UUID,
 ) -> schemas.SceneExtended:
-    return await db.scenes.get_one(scene_id)
+    return await db.scenes.get(scene_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_scene(
     db: DatabaseRepositoriesDepends,
-    user: UserDepends,
+    user: AuthUserDepends,
     *,
     schema: schemas.SceneCreate,
-) -> schemas.SceneSimplified:
+) -> schemas.SceneExtended:
     # TODO move to repository impl
-    files = [
-        models.File(
-            user_id=user.id,
-            **f.model_dump(),
-        )
-        for f in schema.files
-    ]
-    return await db.scenes.create(schema, files=files)
+    files = [models.File(created_by_id=user.id, **f.model_dump()) for f in schema.files]
+    return await db.scenes.create(schema, refresh=True, files=files)
 
 
 @router.post("/{scene_id}/copy", status_code=status.HTTP_201_CREATED)
 async def copy_scene(
     db: DatabaseRepositoriesDepends,
-    user: UserDepends,
+    user: AuthUserDepends,
     *,
     scene_id: UUID,
     schema: schemas.SceneUpdate,  # overrides
-) -> schemas.SceneSimplified:
+) -> schemas.SceneExtended:
     """Duplicate scene. Supports overrides. All scene files are copied too."""
 
     # TODO move to repository impl
     # REFACTOR !!!!!!!
 
-    original = await db.scenes.get_one(scene_id)
+    original = await db.scenes.get(scene_id)
     orig_schema = schemas.SceneExtended.model_validate(original)
 
     data = orig_schema.model_dump(exclude_unset=True, exclude={"files"})
     data |= schema.model_dump(exclude_unset=True, exclude={"files"})
 
-    tasks: list[Task[models.File]] = []
+    tasks: list[Task[schemas.FileExtended]] = []
     async with TaskGroup() as tg:
         for file in original.files:
             coro = db.files.get_one(scene_id=scene_id, file_id=file.file_id)
@@ -88,15 +82,19 @@ async def copy_scene(
         # create new file instance which will be attached to new scene by ORM
         # (and set 'create_by' current user)
         models.File(
-            **f.to_dict(
+            **f.model_dump(
                 # id / user_id / created_at ...
                 exclude=set(schemas.DeclarativeFieldsMixin.model_fields),
             ),
-            user_id=user.id,
+            created_by_id=user.id,
         )
         for f in original_files
     ]
-    instance = await db.scenes.create(schemas.SceneCreate(**data), files=copied_files)
+    instance = await db.scenes.create(
+        schemas.SceneCreate.model_build(**data),
+        files=copied_files,
+        refresh=True,
+    )
     return instance
 
 
@@ -117,10 +115,15 @@ async def delete_scene(
     scene_id: UUID,
 ) -> schemas.SceneSimplified:
     """Mark as deleted."""
-    return await db.scenes.delete(scene_id)
+    return await db.scenes.update(scene_id, is_deleted=True)
 
 
-@router.get("/files", status_code=status.HTTP_200_OK)
+########################################################################################
+# files
+########################################################################################
+
+
+@router.get("/{scene_id}/files/{file_id}", status_code=status.HTTP_200_OK)
 async def get_file(
     db: DatabaseRepositoriesDepends,
     logger: LoggerDepends,
@@ -171,6 +174,6 @@ async def create_file(
 #     file_id: str,
 # ) -> schemas.FileSimplified:
 #     """Mark as deleted."""
-#     instance = await db.files.get_one(scene_id=scene_id, file_id=file_id)
+#     instance = await db.files.get(scene_id=scene_id, file_id=file_id)
 #     await db.files.delete(instance.id)
 #     return instance

@@ -4,10 +4,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from starlette import status
 
+from app.dependencies.users import AuthRouterDepends
 from app.repository.repositories import DatabaseRepositoriesDepends
 from app.schemas import schemas
 
-router = APIRouter(prefix="/projects", tags=["Projects"])
+router = APIRouter(
+    prefix="/projects",
+    tags=["Projects"],
+    dependencies=[AuthRouterDepends],
+)
 
 
 class _ProjectFiltersQuery(schemas.ProjectFilters, as_query=True):
@@ -21,7 +26,7 @@ async def get_projects(
     filters: Annotated[_ProjectFiltersQuery, Depends()],
 ) -> list[schemas.Project]:
     """Get projects. Apply filters."""
-    return await db.projects.get_many(filters)
+    return await db.projects.get_filter(filters)
 
 
 @router.get("/{id}")
@@ -30,7 +35,7 @@ async def get_project(
     *,
     id: UUID,
 ) -> schemas.Project:
-    return await db.projects.get_one(id)
+    return await db.projects.get(id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -57,6 +62,6 @@ async def delete_project(
     db: DatabaseRepositoriesDepends,
     *,
     id: UUID,
-):
+) -> schemas.Project:
     """Mark as deleted."""
-    return await db.projects.delete(id)
+    return await db.projects.update(id, is_deleted=True)

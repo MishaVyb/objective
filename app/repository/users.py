@@ -26,7 +26,7 @@ class UserRepository(SQLAlchemyUserDatabase[models.User, uuid.UUID]):
     def __init__(
         self,
         session: SessionDepends,
-        **_,  # capability with SQLAlchemyRepository
+        # **_,  # capability with SQLAlchemyRepository
     ):
         super().__init__(session, self.model)
 
@@ -71,5 +71,5 @@ class UserManager(UUIDIDMixin, BaseUserManager[models.User, uuid.UUID]):
         user: models.User,
         request: Request | None = None,
     ):
-        self.db.set_current_user(user)
+        self.db.set_current_user(user)  # TMP
         return await self.db.projects.create_default()

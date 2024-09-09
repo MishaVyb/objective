@@ -2,30 +2,38 @@ import logging
 from contextlib import _AsyncGeneratorContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from pprint import pformat
 from typing import Callable, TypeAlias
 
 import pytest
 from asgi_lifespan import LifespanManager
 from httpx import AsyncClient
+from pydantic import SecretStr
 from pytest_mock import MockerFixture
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from starlette import status
 
 from app.applications.objective import ObjectiveAPP
-from app.config import AppSettings
+from app.config import AppSettings, AsyncDatabaseDriver
 from app.dependencies.dependencies import SessionContext
 from app.dependencies.users import UserManagerContext
 from app.main import setup
 from app.repository import models
+from app.repository.models import Base
 from app.repository.repositories import DatabaseRepositories
 from app.schemas import schemas
 from common.dataclass.base import DataclassBase
-from tests.helpers import create_and_drop_tables_by_alembic
+from tests.helpers import (
+    create_and_drop_tables_by_alembic,
+    create_and_drop_tables_by_metadata,
+)
 from tests_old.utils import async_create_database, async_drop_database
 
 logger = logging.getLogger("conftest")
 
+
+request_config_option_alembic = False  # TMP
 
 # class AppSettings(Settings):
 #     """
@@ -67,8 +75,25 @@ def anyio_backend():
 
 
 @pytest.fixture(scope="session")
-def settings():
-    return AppSettings(DATABASE_NAME=f"objective_pytest_{datetime.now()}")
+def settings() -> AppSettings:
+    # TODO use 2 different .env files...
+    if request_config_option_alembic:
+        return AppSettings(
+            APP_RAISE_SERVER_EXCEPTIONS=[500, 501, 502, 503, 504],
+            #
+            DATABASE_NAME=f"objective_pytest_{datetime.now()}",
+        )
+
+    return AppSettings(
+        APP_RAISE_SERVER_EXCEPTIONS=[500, 501, 502, 503, 504],
+        #
+        DATABASE_DRIVER=AsyncDatabaseDriver.SQLITE,
+        DATABASE_USER=SecretStr(""),
+        DATABASE_PASSWORD=SecretStr(""),
+        DATABASE_HOST=None,
+        DATABASE_PORT=None,
+        DATABASE_NAME=":memory:",
+    )
 
 
 # @pytest.fixture(scope="session", autouse=True)
@@ -92,7 +117,8 @@ async def app(settings: AppSettings):
 @pytest.fixture
 def engine(settings: AppSettings, app: ObjectiveAPP):
     engine: AsyncEngine = app.state.engine
-    assert "pytest" in (engine.url.database or ""), "Test database required"
+    if request_config_option_alembic:
+        assert "pytest" in (engine.url.database or ""), "Test database required"
     return engine
 
 
@@ -101,6 +127,10 @@ async def setup_database(settings: AppSettings, engine: AsyncEngine):
     """
     Create test database. Fixture with async implementation of sqlalchemy_utils methods.
     """
+    if not request_config_option_alembic:
+        yield
+        return
+
     # engine = create_async_engine(settings.DATABASE_URL_STR)  # ???
     await async_create_database(engine.url)
 
@@ -163,16 +193,13 @@ async def setup_tables(
     settings: AppSettings,
 ):
 
-    # if request.config.option.alembic:
-    #     async with create_and_drop_tables_by_alembic(engine, settings):
-    #         yield
+    if request_config_option_alembic:
+        async with create_and_drop_tables_by_alembic(engine, settings):
+            yield
 
-    # else:
-    #     async with create_and_drop_tables_by_metadata(engine, Base.metadata):
-    #         yield
-
-    async with create_and_drop_tables_by_alembic(engine, settings):
-        yield
+    else:
+        async with create_and_drop_tables_by_metadata(engine, Base.metadata):
+            yield
 
 
 @pytest.fixture
@@ -260,7 +287,7 @@ async def users(
                     request=mock_request,
                 )
 
-                await db.users.session.refresh(
+                await db.all.session.refresh(
                     users[field.name],
                     ["projects", "scenes", "files"],
                 )
@@ -285,7 +312,7 @@ async def clients(app: ObjectiveAPP, users: UsersFixture):
                 "/api/auth/jwt/login",
                 data=dict(username=user.email, password="password"),
             )
-            assert response.status_code == status.HTTP_200_OK, response.text
+            assert response.status_code == status.HTTP_200_OK, pformat(response.json())
 
             token = response.json()["access_token"]
             clients[fieldname] = await AsyncClient(
