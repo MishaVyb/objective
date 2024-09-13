@@ -21,11 +21,8 @@ class Project(DeclarativeFieldsMixin):
 
 
 class Scene(DeclarativeFieldsMixin):
-    project: Mapped[Project] = relationship(
-        "Project",
-        back_populates="scenes",
-    )
-    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("project.id"))
+    project: Mapped[Project] = relationship(Project, back_populates="scenes")
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(Project.id), index=True)
 
     # meta info:
     name: Mapped[str]
@@ -47,7 +44,6 @@ class Scene(DeclarativeFieldsMixin):
 
 
 class File(DeclarativeFieldsMixin):
-    __table_args__ = (UniqueConstraint("scene_id", "file_id"),)
 
     # file data
     file_id: Mapped[str] = mapped_column(index=True)  # excalidraw(!) file id
@@ -55,12 +51,29 @@ class File(DeclarativeFieldsMixin):
     data: Mapped[str]
 
     # relations:
-    scene_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scene.id"))
-    scene: Mapped[Scene] = relationship("Scene", back_populates="files")
+    scene_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(Scene.id), index=True)
+    scene: Mapped[Scene] = relationship(Scene, back_populates="files")
+
+    __table_args__ = (UniqueConstraint(scene_id, file_id),)
 
 
 # Postponed relations definition
 # https://docs.sqlalchemy.org/en/20/orm/basic_relationships.html#adding-relationships-to-mapped-classes-after-declaration
-User.projects = relationship("Project", back_populates="created_by", uselist=True)
-User.scenes = relationship("Scene", back_populates="created_by", uselist=True)
-User.files = relationship("File", back_populates="created_by", uselist=True)
+User.projects = relationship(
+    Project,
+    back_populates="created_by",
+    uselist=True,
+    foreign_keys=[Project.created_by_id],
+)
+User.scenes = relationship(
+    Scene,
+    back_populates="created_by",
+    uselist=True,
+    foreign_keys=[Scene.created_by_id],
+)
+User.files = relationship(
+    File,
+    back_populates="created_by",
+    uselist=True,
+    foreign_keys=[File.created_by_id],
+)

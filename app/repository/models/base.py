@@ -145,27 +145,14 @@ class DeclarativeFieldsMixin(Base):
         index=True,
     )
     updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user.id"),
         default=None,
-        # TODO
-        # ForeignKey("user.id"),
-        # index=True,
+        index=True,
     )
 
-    # OLD
-    # @declared_attr
-    # def created_by(cls) -> Mapped[User]:
-    #     return relationship("User")
-
-    # NEW
     @declared_attr
     @classmethod
     def created_by(cls) -> Mapped[Optional["User"]]:
         return relationship(foreign_keys=[cls.created_by_id])
-
-    # TODO
-    # @declared_attr
-    # @classmethod
-    # def updated_by(cls) -> Mapped[Optional["User"]]:
-    #     return relationship(foreign_keys=[cls.updated_by_id])
 
     is_deleted: Mapped[bool] = mapped_column(default=False)

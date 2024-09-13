@@ -11,19 +11,14 @@ from typing import (
     TypeVar,
 )
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from pydantic import BaseModel, TypeAdapter, ValidationError
 from sqlalchemy import Select, exc, select
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.identity import WeakInstanceDict
 from sqlalchemy.orm.interfaces import ORMOption
 
-from app.dependencies.dependencies import (
-    AppDepends,
-    AppSettingsDepends,
-    RequestUserDepends,
-    SessionDepends,
-)
+from app.dependencies.dependencies import AppDepends, AppSettingsDepends, SessionDepends
 from app.exceptions import (
     DeletedInstanceError,
     ExpireMissingInstanceError,
@@ -39,9 +34,13 @@ from common.schemas.base import BaseSchema, DictModel
 from .base import AbstractRepository
 
 if TYPE_CHECKING:
+    from app.applications.objective import ObjectiveRequest
+    from app.dependencies.users import AuthenticatedUser
     from app.repository.models import DeclarativeFieldsMixin
 else:
     DeclarativeFieldsMixin = object
+    AuthenticatedUser = object
+    ObjectiveRequest = object
 
 logger = logging.getLogger(__name__)
 
@@ -126,20 +125,24 @@ class SQLAlchemyRepository(
 
     def __init__(
         self,
+        request: Request,
         session: SessionDepends,
         storage: Annotated[StrongInstanceIdentityMap, Depends()],
         logger: LoggerDepends,
         app: AppDepends,
         settings: AppSettingsDepends,
-        current_user: RequestUserDepends,  # REMOVE
     ):
+        self.request: ObjectiveRequest = request
         self.session = session
         self.logger = logger
         self.app = app
         self.settings = settings
-        self.current_user = current_user
 
         self._storage = RepositoryLocalStorage(self.model, storage)
+
+    @property
+    def current_user(self) -> AuthenticatedUser:
+        return self.request.state.current_user
 
     async def flush(self, ids: list[uuid.UUID]) -> None:
         # do nothing with StrongInstanceIdentityMap at this point, as sqlalchemy

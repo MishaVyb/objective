@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Type
 
 import fastapi.datastructures
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def setup_initial_scenes(app: ObjectiveAPP) -> list[schemas.SceneJsonFilePersistence]:
+def setup_initial_scenes(app: ObjectiveAPP) -> None:
     scenes = []
     for filepath in app.state.settings.USERS_INITIAL_SCENES:
         with open(filepath) as file:
@@ -46,10 +46,6 @@ def setup_initial_scenes(app: ObjectiveAPP) -> list[schemas.SceneJsonFilePersist
 async def lifespan(app: ObjectiveAPP):
     setup_initial_scenes(app)
 
-    # try:
-    #     # engine could be already present (at pytest session)
-    #     engine = app.state.engine
-    # except AttributeError:
     engine = app.state.engine = create_async_engine(
         app.state.settings.DATABASE_URL,
         echo=app.state.settings.DATABASE_ECHO,
@@ -65,6 +61,21 @@ async def lifespan(app: ObjectiveAPP):
         yield
     finally:
         await engine.dispose()
+
+
+if TYPE_CHECKING:
+
+    class ObjectiveRequest(Request):
+        class State(fastapi.datastructures.State):
+            # NOTE
+            # populated on 'get_auth_user' depends resolutions
+            # and after success User registrations
+            current_user: AuthenticatedUser
+
+        state: State
+
+else:
+    ObjectiveRequest = Request
 
 
 class ObjectiveAPP(FastAPI):

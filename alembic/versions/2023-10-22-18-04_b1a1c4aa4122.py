@@ -5,6 +5,7 @@ Revises:
 Create Date: 2023-10-22 18:04:53.914791
 
 """
+
 import fastapi_users_db_sqlalchemy
 import sqlalchemy as sa
 
@@ -56,6 +57,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["user.id"],
+            name="project_user_id_fkey",
         ),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -90,6 +92,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["user.id"],
+            name="scene_user_id_fkey",
         ),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -121,9 +124,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["user.id"],
+            name="file_user_id_fkey",
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("scene_id", "file_id"),
+        sa.UniqueConstraint(
+            "scene_id",
+            "file_id",
+            name="file_scene_id_file_id_key",
+        ),
     )
     op.create_index(op.f("ix_file_file_id"), "file", ["file_id"], unique=False)
     # ### end Alembic commands ###

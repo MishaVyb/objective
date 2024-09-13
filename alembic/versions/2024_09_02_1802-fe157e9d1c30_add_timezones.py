@@ -1,4 +1,4 @@
-"""test
+"""add timezones
 
 Revision ID: fe157e9d1c30
 Revises: b1a1c4aa4122

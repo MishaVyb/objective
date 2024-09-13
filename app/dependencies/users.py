@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from fastapi import Depends, Request
 from fastapi_users import FastAPIUsers
@@ -17,29 +17,7 @@ from app.repository import models
 from app.repository.repositories import DatabaseRepositoriesDepends
 from app.repository.users import UserManager
 
-if TYPE_CHECKING:
-    from app.applications.objective import ObjectiveAPP
-else:
-    ObjectiveAPP = object
-
 AuthenticatedUser = models.User  # TODO pydantic schema
-
-# UNUSED
-# async def get_database_session_no_autocommit(app: AppDepends) -> AsyncGenerator[AsyncSession, None]:
-#     async with app.state.session_maker() as session:
-
-#         # NOTE:
-#         # no session.begins() with autocommit, because `fastapi_users` implements
-#         # `session.commit` explicit call
-#         yield session
-
-
-# async def get_user_repo(db: DatabaseRepositoriesDepends):
-#     yield db.users
-
-
-# UserRepositoryDepends = Annotated[UserRepository, Depends(get_user_repo)]
-# UserRepositoryContext = asynccontextmanager(get_user_repo)
 
 
 async def get_user_manager(
@@ -78,13 +56,14 @@ _get_auth_user = fastapi_users_api.current_user(active=True)
 
 async def get_auth_user(
     request: Request,
-    db: DatabaseRepositoriesDepends,
-    authenticated_user: Annotated[AuthenticatedUser, Depends(_get_auth_user)],
+    current_user: Annotated[AuthenticatedUser, Depends(_get_auth_user)],
 ) -> AuthenticatedUser:
-    request.state.authenticated_user = authenticated_user
-    db.set_current_user(authenticated_user)
-    return request.state.authenticated_user
+    request.state.current_user = current_user
+    return request.state.current_user
 
 
 AuthRouterDepends = Depends(get_auth_user)
+"""Marks route as protected. Authentication is required. """
+
 AuthUserDepends = Annotated[AuthenticatedUser, Depends(get_auth_user)]
+"""Resolve current user. """

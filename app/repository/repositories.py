@@ -26,11 +26,10 @@ from common.repo.sqlalchemy import (
 from . import models, schemas
 
 if TYPE_CHECKING:
-    from app.applications.objective import ObjectiveAPP
-    from app.dependencies.dependencies import AuthenticatedUser
+    from app.applications.objective import ObjectiveAPP, ObjectiveRequest
 else:
-    AuthenticatedUser = object
     ObjectiveAPP = object
+    ObjectiveRequest = object
 
 
 # NOTE: Specific for Objective service only (not common)
@@ -117,10 +116,10 @@ class ProjectRepository(
         scenes = [
             models.Scene(
                 name=scene.app_state.get("name") or self.DEFAULT_SCENE_NAME,
-                created_by_id=self.current_user.id,  # ex 'user_id' # TODO
+                created_by_id=self.current_user.id,  # ex 'user_id'
                 files=[
                     models.File(
-                        created_by_id=self.current_user.id,  # ex 'user_id' # TODO
+                        created_by_id=self.current_user.id,  # ex 'user_id'
                         **f.model_dump(),
                     )
                     for f in scene.files.values()
@@ -181,18 +180,14 @@ class DatabaseRepositories:
 
     users: Annotated[UserRepository, Depends()]
 
-    def set_current_user(self, user: models.User):
-        for repo in self.repositories:
-            repo.current_user = user
-
     @classmethod
     def construct(
         cls,
+        request: ObjectiveRequest,
         session: AsyncSession,
         app: ObjectiveAPP,
         settings: AppSettings,
         logger: Logger,
-        current_user: AuthenticatedUser,
     ) -> Self:
         # storage shared between all repositories for single session
         storage = StrongInstanceIdentityMap(session)
@@ -200,12 +195,12 @@ class DatabaseRepositories:
             # SQLAlchemyRepositories:
             **{
                 field.name: field.type(
+                    request=request,
                     session=session,
                     storage=storage,
                     logger=logger,
                     app=app,
                     settings=settings,
-                    current_user=current_user,
                 )
                 for field in fields(cls)
                 if field.name != "users"

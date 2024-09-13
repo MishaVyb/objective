@@ -8,6 +8,7 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 from app.config import AppSettings
 from app.dependencies.dependencies import SessionDepends
+from app.schemas import schemas
 
 from . import models
 
@@ -23,11 +24,7 @@ else:
 class UserRepository(SQLAlchemyUserDatabase[models.User, uuid.UUID]):
     model: Type[models.User] = models.User
 
-    def __init__(
-        self,
-        session: SessionDepends,
-        # **_,  # capability with SQLAlchemyRepository
-    ):
+    def __init__(self, session: SessionDepends):
         super().__init__(session, self.model)
 
     # override to using 'flush' instead of 'commit':
@@ -69,7 +66,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[models.User, uuid.UUID]):
     async def on_after_register(
         self,
         user: models.User,
-        request: Request | None = None,
-    ):
-        self.db.set_current_user(user)  # TMP
+        request: Request,
+    ) -> schemas.Project:
+        # as there are no Request user, populate current user after registration
+        request.state.current_user = user
         return await self.db.projects.create_default()

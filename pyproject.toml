@@ -116,4 +116,3 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore:.*unclosed.*:ResourceWarning",
 ]
-env = ["PYTEST_USERS_SECRET=1234567890"]

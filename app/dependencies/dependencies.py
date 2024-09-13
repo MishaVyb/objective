@@ -58,18 +58,16 @@ SessionContext = asynccontextmanager(get_database_session)
 """Common database session context. """
 
 
-class NoAuthenticatedUserStab:
-    pass
+# UNUSED
+# NOTE: get user from Request populated by another dependency before
 
+# class NoAuthenticatedUserStab:
+#     pass
 
-# HACK resolve circular imports
-# ✅ user depends -> user repo -> db -> depends -> get current user from request
-# ❌ user depends -> user repo -> db -> depends -> get current user from user depends
-async def get_request_user(request: Request) -> AuthenticatedUser:
-    try:
-        return request.state.authenticated_user
-    except AttributeError:
-        return NoAuthenticatedUserStab()  # type: ignore
+# async def get_request_user(request: Request) -> AuthenticatedUser:
+#     try:
+#         return request.state.authenticated_user
+#     except AttributeError:
+#         return NoAuthenticatedUserStab()  # type: ignore
 
-
-RequestUserDepends = Annotated[AuthenticatedUser, Depends(get_request_user)]
+# RequestUserDepends = Annotated[AuthenticatedUser, Depends(get_request_user)]
