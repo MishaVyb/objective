@@ -1,6 +1,7 @@
 import importlib
 import sys
 import traceback
+from typing import Any
 
 from mypy.plugin import ClassDefContext
 from mypy.util import FancyFormatter
@@ -15,7 +16,7 @@ from pydantic.mypy import (
 from common.schemas.constructor import ModelConstructor
 
 # Increment version if plugin changes and mypy caches should be invalidated
-__version__ = 1
+__version__ = 2
 
 
 def plugin(version: str) -> type[PydanticPlugin]:
@@ -23,6 +24,15 @@ def plugin(version: str) -> type[PydanticPlugin]:
 
 
 class ExtendedPydanticPlugin(PydanticPlugin):
+    """
+    Extend original `pydantic.plugin` according to `ModelConstructor` options.
+    Usage::
+
+        [tool.mypy]
+        plugins = "saber.lib.pydantic.mypy"
+
+    """
+
     def _pydantic_model_class_maker_callback(self, ctx: ClassDefContext) -> bool:
         transformer = ExtendedPydanticModelTransformer(
             ctx.cls,
@@ -50,10 +60,9 @@ class ExtendedPydanticModelTransformer(PydanticModelTransformer):
 
         class_def = self._cls
         for base_info in reversed(class_def.info.mro):
-            module_name, class_name = _get_object_module_and_name(base_info.fullname)
             if (
-                ModelConstructor.__module__ == module_name
-                and ModelConstructor.__name__ == class_name
+                ModelConstructor.__module__ == base_info.module_name
+                and ModelConstructor.__name__ == base_info.name
             ):
                 break
         else:
@@ -61,7 +70,7 @@ class ExtendedPydanticModelTransformer(PydanticModelTransformer):
 
         # NOTE
         # handle ModelConstructor options by importing target model definition:
-        module_name, class_name = _get_object_module_and_name(class_def.fullname)
+        module_name = class_def.info.module_name
         try:
             module = importlib.import_module(module_name)
         except Exception:
@@ -80,7 +89,16 @@ class ExtendedPydanticModelTransformer(PydanticModelTransformer):
             sys.stdout.write("".join(msgs))
             return fields, class_vars
 
-        model = getattr(module, class_name, None)
+        # NOTE
+        # Resolve getting object from globals and/or from any object locals
+        # For example, resolve this fullname: 'src.app.schemas.MySchema.NestedSchema'
+        entity = module
+        entity_names = class_def.info.fullname.split(".")
+        for name in entity_names:
+            if name not in module_name:
+                entity = getattr(entity, name, None)
+        model: Any = entity
+
         if not isinstance(model, type) or not issubclass(model, ModelConstructor):
             return fields, class_vars
 
@@ -119,10 +137,3 @@ class ExtendedPydanticModelTransformer(PydanticModelTransformer):
                 result_fields.append(field_info)
 
         return result_fields, class_vars
-
-
-def _get_object_module_and_name(fullname: str):
-    splitted = fullname.split(".")
-    module_name = ".".join(splitted[:-1])
-    class_name = splitted[-1]
-    return module_name, class_name
