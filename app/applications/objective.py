@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Type
 
 import fastapi.datastructures
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -24,7 +24,7 @@ from common.fastapi.monitoring.sentry import (
 )
 from common.fastapi.routes import monitoring
 
-from ..api import projects, scenes, users
+from ..api import v1, v2
 from ..config import AppSettings
 
 if TYPE_CHECKING:
@@ -140,7 +140,7 @@ class ObjectiveAPP(FastAPI):
             origins = ["http://objective.services"]
 
         else:
-            ValueError
+            raise ValueError
 
         app.add_middleware(
             CORSMiddleware,
@@ -154,7 +154,7 @@ class ObjectiveAPP(FastAPI):
             debug=settings.APP_VERBOSE_EXCEPTIONS,
             dashboard_url=str(settings.SENTRY_DASHBOARD_URL),
             custom_encoder={DeclarativeBase: lambda v: str(v)},
-            # replace_uvicorn_logging=True, # ???
+            replace_uvicorn_error_log=True,
             raise_server_exceptions=settings.APP_RAISE_SERVER_EXCEPTIONS,
             include_traceback=True,
             traceback_limit=-3,
@@ -171,13 +171,36 @@ class ObjectiveAPP(FastAPI):
         exc_handlers.setup(app)
 
         # setup routes
-        prefix = str(settings.API_PREFIX)  # v1
-        app.include_router(monitoring.router, prefix=prefix)
-        app.include_router(users.router, prefix=prefix)
-        app.include_router(projects.router, prefix=prefix)
-        app.include_router(scenes.router, prefix=prefix)
 
-        # v2
+        # BACKWARDS CAPABILITY
+        _old = APIRouter(prefix=str(settings.API_PREFIX), include_in_schema=False)
+        _old.include_router(v2.users.router)
+        _old.include_router(v1.routes.projects)
+        _old.include_router(v1.routes.scenes)
+        _old.include_router(v1.routes.files)
+
+        _v1 = APIRouter(
+            prefix=str(settings.API_PREFIX / "v1"),
+            generate_unique_id_function=lambda router: f"{router.name}_v1",
+            deprecated=True,
+        )
+        _v1.include_router(v1.routes.projects)
+        _v1.include_router(v1.routes.scenes)
+        _v1.include_router(v1.routes.files)
+
+        _v2 = APIRouter(
+            prefix=str(settings.API_PREFIX / "v2"),
+            generate_unique_id_function=lambda router: f"{router.name}_v2",
+        )
+        _v2.include_router(monitoring.router)
+        _v2.include_router(v2.users.router)
+        _v2.include_router(v2.routes.projects)
+        _v2.include_router(v2.routes.scenes)
+        _v2.include_router(v2.routes.files)
+
+        app.include_router(_old)
+        app.include_router(_v1)
+        app.include_router(_v2)
 
         # setup openapi at the end after app is fully configured
         openapi_schema = app.openapi()

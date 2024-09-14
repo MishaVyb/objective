@@ -29,7 +29,7 @@ class AppSettings(BaseSettings, VerboseModel):
 
     SERVICE_DIR: Path = Path(__file__).resolve().parent.parent
 
-    APP_ENVIRONMENT: Literal["pytest", "dev", "staging", "production"]
+    APP_ENVIRONMENT: Literal["dev", "staging", "production"]
 
     APP_NAME: str = "Objective"
     APP_DESCRIPTION: str = "Plan your shooting objectively"

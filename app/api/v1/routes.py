@@ -7,20 +7,87 @@ from starlette import status
 
 from app.dependencies.users import AuthRouterDepends, AuthUserDepends
 from app.exceptions import NotFoundInstanceError
+from app.repository import models
+from app.repository.repositories import DatabaseRepositoriesDepends
 from app.schemas import schemas
 from common.fastapi.monitoring.base import LoggerDepends
 
-from ..repository import models
-from ..repository.repositories import DatabaseRepositoriesDepends
+########################################################################################
+# Projects
+########################################################################################
 
-router = APIRouter(prefix="/scenes", tags=["Scenes"], dependencies=[AuthRouterDepends])
+
+projects = APIRouter(
+    prefix="/projects",
+    tags=["Projects"],
+    dependencies=[AuthRouterDepends],
+)
+
+
+class _ProjectFiltersQuery(schemas.ProjectFilters, as_query=True):
+    pass
+
+
+@projects.get("")
+async def get_projects(
+    db: DatabaseRepositoriesDepends,
+    *,
+    filters: Annotated[_ProjectFiltersQuery, Depends()],
+) -> list[schemas.Project]:
+    """Get projects. Apply filters."""
+    return await db.projects.get_filter(filters)
+
+
+@projects.get("/{id}")
+async def get_project(
+    db: DatabaseRepositoriesDepends,
+    *,
+    id: UUID,
+) -> schemas.Project:
+    return await db.projects.get(id)
+
+
+@projects.post("", status_code=status.HTTP_201_CREATED)
+async def create_project(
+    db: DatabaseRepositoriesDepends,
+    *,
+    schema: schemas.ProjectCreate,
+) -> schemas.Project:
+    return await db.projects.create(schema)
+
+
+@projects.patch("/{id}", status_code=status.HTTP_200_OK)
+async def update_project(
+    db: DatabaseRepositoriesDepends,
+    *,
+    id: UUID,
+    schema: schemas.ProjectUpdate,
+) -> schemas.Project:
+    return await db.projects.update(id, schema)
+
+
+@projects.delete("/{id}", status_code=status.HTTP_200_OK)
+async def delete_project(
+    db: DatabaseRepositoriesDepends,
+    *,
+    id: UUID,
+) -> schemas.Project:
+    """Mark as deleted."""
+    return await db.projects.update(id, is_deleted=True)
+
+
+########################################################################################
+# Scenes
+########################################################################################
+
+scenes = APIRouter(prefix="/scenes", tags=["Scenes"], dependencies=[AuthRouterDepends])
 
 
 class _SceneFiltersQuery(schemas.SceneFilters, as_query=True):
     pass
 
 
-@router.get("")
+@scenes.get("")
 async def get_scenes(
     db: DatabaseRepositoriesDepends,
     *,
@@ -31,7 +98,7 @@ async def get_scenes(
     return [scene for scene in scenes if not scene.project.is_deleted]  # TMP
 
 
-@router.get("/{scene_id}")
+@scenes.get("/{scene_id}")
 async def get_scene(
     db: DatabaseRepositoriesDepends,
     *,
@@ -40,7 +107,7 @@ async def get_scene(
     return await db.scenes.get(scene_id)
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@scenes.post("", status_code=status.HTTP_201_CREATED)
 async def create_scene(
     db: DatabaseRepositoriesDepends,
     user: AuthUserDepends,
@@ -52,7 +119,7 @@ async def create_scene(
     return await db.scenes.create(schema, refresh=True, files=files)
 
 
-@router.post("/{scene_id}/copy", status_code=status.HTTP_201_CREATED)
+@scenes.post("/{scene_id}/copy", status_code=status.HTTP_201_CREATED)
 async def copy_scene(
     db: DatabaseRepositoriesDepends,
     user: AuthUserDepends,
@@ -98,7 +165,7 @@ async def copy_scene(
     return instance
 
 
-@router.patch("/{scene_id}", status_code=status.HTTP_200_OK)
+@scenes.patch("/{scene_id}", status_code=status.HTTP_200_OK)
 async def update_scene(
     scene_id: UUID,
     db: DatabaseRepositoriesDepends,
@@ -108,7 +175,7 @@ async def update_scene(
     return await db.scenes.update(scene_id, schema)
 
 
-@router.delete("/{scene_id}", status_code=status.HTTP_200_OK)
+@scenes.delete("/{scene_id}", status_code=status.HTTP_200_OK)
 async def delete_scene(
     db: DatabaseRepositoriesDepends,
     *,
@@ -123,7 +190,10 @@ async def delete_scene(
 ########################################################################################
 
 
-@router.get("/{scene_id}/files/{file_id}", status_code=status.HTTP_200_OK)
+files = APIRouter(prefix="/scenes", tags=["Files"], dependencies=[AuthRouterDepends])
+
+
+@files.get("/{scene_id}/files/{file_id}", status_code=status.HTTP_200_OK)
 async def get_file(
     db: DatabaseRepositoriesDepends,
     logger: LoggerDepends,
@@ -146,7 +216,7 @@ async def get_file(
         return items[0]
 
 
-@router.post("/{scene_id}/files", status_code=status.HTTP_201_CREATED)
+@files.post("/{scene_id}/files", status_code=status.HTTP_201_CREATED)
 async def create_file(
     db: DatabaseRepositoriesDepends,
     logger: LoggerDepends,

@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.schemas import schemas
 
-from ..dependencies.users import fastapi_users_api, fastapi_users_backend
+from ...dependencies.users import fastapi_users_api, fastapi_users_backend
 
 router = APIRouter()
 
