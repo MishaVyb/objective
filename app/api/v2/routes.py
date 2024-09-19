@@ -1,13 +1,10 @@
-from asyncio import Task, TaskGroup
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette import status
 
-from app.dependencies.users import AuthRouterDepends, AuthUserDepends
-from app.exceptions import NotFoundInstanceError
-from app.repository import models
+from app.dependencies.users import AuthRouterDepends
 from app.repository.repositories import DatabaseRepositoriesDepends
 from app.schemas import schemas
 from common.fastapi.monitoring.base import LoggerDepends
@@ -33,9 +30,8 @@ async def get_projects(
     db: DatabaseRepositoriesDepends,
     *,
     filters: Annotated[_ProjectFiltersQuery, Depends()],
-) -> list[schemas.Project]:
-    """Get projects. Apply filters."""
-    return await db.projects.get_filter(filters)
+) -> schemas.GetProjectsResponse:
+    return schemas.GetProjectsResponse(items=await db.projects.get_filter(filters))
 
 
 @projects.get("/{id}")
@@ -51,9 +47,9 @@ async def get_project(
 async def create_project(
     db: DatabaseRepositoriesDepends,
     *,
-    schema: schemas.ProjectCreate,
+    payload: schemas.ProjectCreate,
 ) -> schemas.Project:
-    return await db.projects.create(schema)
+    return await db.projects.create(payload)
 
 
 @projects.patch("/{id}", status_code=status.HTTP_200_OK)
@@ -61,9 +57,9 @@ async def update_project(
     db: DatabaseRepositoriesDepends,
     *,
     id: UUID,
-    schema: schemas.ProjectUpdate,
+    payload: schemas.ProjectUpdate,
 ) -> schemas.Project:
-    return await db.projects.update(id, schema)
+    return await db.projects.update(id, payload)
 
 
 @projects.delete("/{id}", status_code=status.HTTP_200_OK)
@@ -92,10 +88,8 @@ async def get_scenes(
     db: DatabaseRepositoriesDepends,
     *,
     filters: Annotated[_SceneFiltersQuery, Depends()],
-) -> list[schemas.SceneExtended]:
-    """Get scenes. Apply filters."""
-    scenes = await db.scenes.get_filter(filters)
-    return [scene for scene in scenes if not scene.project.is_deleted]  # TMP
+) -> schemas.GetScenesResponse:
+    return schemas.GetScenesResponse(items=await db.scenes.get_filter(filters))
 
 
 @scenes.get("/{scene_id}")
@@ -110,58 +104,64 @@ async def get_scene(
 @scenes.post("", status_code=status.HTTP_201_CREATED)
 async def create_scene(
     db: DatabaseRepositoriesDepends,
-    user: AuthUserDepends,
     *,
-    schema: schemas.SceneCreate,
+    payload: schemas.SceneCreate,
 ) -> schemas.SceneExtended:
-    # TODO move to repository impl
-    files = [models.File(created_by_id=user.id, **f.model_dump()) for f in schema.files]
-    return await db.scenes.create(schema, refresh=True, files=files)
+    instance = await db.scenes.create(payload, refresh=True)
+    for f in payload.files:
+        await db.files.create(f)
+    return instance
 
 
 @scenes.post("/{scene_id}/copy", status_code=status.HTTP_201_CREATED)
 async def copy_scene(
     db: DatabaseRepositoriesDepends,
-    user: AuthUserDepends,
     *,
     scene_id: UUID,
-    schema: schemas.SceneUpdate,  # overrides
+    payload: schemas.SceneUpdate,  # overrides
+    logger: LoggerDepends,
 ) -> schemas.SceneExtended:
-    """Duplicate scene. Supports overrides. All scene files are copied too."""
-
-    # TODO move to repository impl
-    # REFACTOR !!!!!!!
-
+    """Duplicate scene. Supports overrides."""
     original = await db.scenes.get(scene_id)
-    orig_schema = schemas.SceneExtended.model_validate(original)
 
-    data = orig_schema.model_dump(exclude_unset=True, exclude={"files"})
-    data |= schema.model_dump(exclude_unset=True, exclude={"files"})
+    # # handle files:
+    # if original.created_by_id != db.users.current_user.id:
+    #     logger.info("Coping external scene. Handle file. ")
 
-    tasks: list[Task[schemas.FileExtended]] = []
-    async with TaskGroup() as tg:
-        for file in original.files:
-            coro = db.files.get_one(scene_id=scene_id, file_id=file.file_id)
-            tasks.append(tg.create_task(coro))
+    #     tasks: list[Task[schemas.FileExtended]] = []
+    #     async with TaskGroup() as tg:
+    #         for file in original.files:
+    #             coro = db.files.get_one(
+    #                 file_id=file.file_id, created_by_id=file.created_by_id
+    #             )
+    #             tasks.append(tg.create_task(coro))
 
-    original_files = [t.result() for t in tasks]
-    copied_files = [
-        # create new file instance which will be attached to new scene by ORM
-        # (and set 'create_by' current user)
-        models.File(
-            **f.model_dump(
-                # id / user_id / created_at ...
-                exclude=set(schemas.DeclarativeFieldsMixin.model_fields),
-            ),
-            created_by_id=user.id,
-        )
-        for f in original_files
-    ]
+    #     original_files = [t.result() for t in tasks]
+    #     for file in original_files:
+
+    #         # NOTE
+    #         # extra case when user copies external Scene (and its Files) more than once
+    #         if current_file := await db.files.get_one_or_none(file_id=file.file_id):
+    #             logger.warning(
+    #                 "Found existing file: %s. "
+    #                 "Delete previous file to be replaced with copied one. ",
+    #                 current_file.id,
+    #             )
+    #             await db.files.delete(current_file.id)
+
+    #         logger.warning("Copy file: %s. ", file.id)
+    #         await db.files.create(schemas.FileCreate.model_build(file))
+
+    # handle elements:
+    ...
+
+    # handle scene
+    data = original.model_dump() | payload.model_dump(exclude_unset=True)
     instance = await db.scenes.create(
         schemas.SceneCreate.model_build(**data),
-        files=copied_files,
         refresh=True,
     )
+
     return instance
 
 
@@ -190,60 +190,30 @@ async def delete_scene(
 ########################################################################################
 
 
-files = APIRouter(prefix="/scenes", tags=["Files"], dependencies=[AuthRouterDepends])
+files = APIRouter(prefix="/files", tags=["Files"], dependencies=[AuthRouterDepends])
 
 
-@files.get("/{scene_id}/files/{file_id}", status_code=status.HTTP_200_OK)
+@files.get("", status_code=status.HTTP_200_OK)
 async def get_file(
     db: DatabaseRepositoriesDepends,
-    logger: LoggerDepends,
     *,
-    scene_id: UUID,
-    file_id: str,
+    file_id: schemas.FileID,
 ) -> schemas.FileExtended:
-    try:
-        return await db.files.get_one(scene_id=scene_id, file_id=file_id)
-    except NotFoundInstanceError as e:
-        # TMP ugly fix
-        # TODO see logs how many scene affected by this problem and write
-        # migration script to duplicate those files from other scene to this
-        logger.warning(
-            f"Not found file per scene: {scene_id}. Fallbacks to all files. ",
-        )
-        items = await db.files.get_where(file_id=file_id)
-        if not items:
-            raise e
-        return items[0]
+    return await db.files.get_one(file_id=file_id)
 
 
-@files.post("/{scene_id}/files", status_code=status.HTTP_201_CREATED)
+@files.post("", status_code=status.HTTP_201_CREATED)
 async def create_file(
     db: DatabaseRepositoriesDepends,
     logger: LoggerDepends,
     *,
     scene_id: UUID,
-    schema: schemas.FileCreate,
+    payload: schemas.FileCreate,
 ) -> schemas.FileSimplified:
-    try:
-        # NOTE: handle multiply requests with the same file from frontend
-        f = await db.files.get_one(scene_id=scene_id, file_id=schema.file_id)
-        logger.warning("Trying to create file, that already exist: %s", f.file_id)
-        return f
-    except NotFoundInstanceError:
-        return await db.files.create(schema, scene_id=scene_id)
 
+    # NOTE: handle multiply requests with the same file from frontend
+    if file := await db.files.get_one_or_none(file_id=payload.file_id):
+        logger.warning("Duplicate file id: %s. File already exist. ", file.id)
+        return file
 
-# # UNUSED
-# # for now its unused on frontend, as we handle delete file by deleting
-# # Excalidraw element on frontend, thats all. In future, we could implements deleting
-# # files on backend also, if it will be required by getting out of HDD space
-# async def delete_file(
-#     scene_id: UUID,
-#     db: DatabaseRepositoriesDepends,
-#     *,
-#     file_id: str,
-# ) -> schemas.FileSimplified:
-#     """Mark as deleted."""
-#     instance = await db.files.get(scene_id=scene_id, file_id=file_id)
-#     await db.files.delete(instance.id)
-#     return instance
+    return await db.files.create(payload, scene_id=scene_id)

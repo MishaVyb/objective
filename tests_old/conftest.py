@@ -10,7 +10,7 @@ from app.applications.objective import ObjectiveAPP, ObjectiveRequest
 from app.config import AppSettings
 from app.dependencies.users import UserManagerContext
 from app.repository import models
-from app.schemas import schemas
+from app.schemas import deprecated_schemas
 from common.dataclass.base import DataclassBase
 from tests.conftest import *  # TMP
 
@@ -47,7 +47,7 @@ async def users(
         async with UserManagerContext(db, settings) as user_manager:
             for field in UsersFixture.fields():
                 users[field.name] = await user_manager.create(
-                    schemas.UserCreate(
+                    deprecated_schemas.UserCreate(
                         email=f"{field.name}@test.com",
                         password="password",
                         username=f"{field.name}",

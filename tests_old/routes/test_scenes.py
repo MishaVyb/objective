@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from starlette import status
 
-from app.schemas import schemas
+from app.schemas import deprecated_schemas
 from tests_old.conftest import ClientsFixture, UsersFixture
 from tests_old.utils import verbose
 
@@ -32,7 +32,7 @@ async def test_scene_crud(
     # [1] create
     response = await client.post(
         "/api/scenes",
-        content=schemas.SceneCreate(
+        content=deprecated_schemas.SceneCreate(
             name="test-scene",
             project_id=project_id,
         ).model_dump_json(exclude_unset=True, by_alias=True),
@@ -75,7 +75,7 @@ async def test_scene_crud(
     # [3] update simple
     response = await client.patch(
         f"/api/scenes/{scene_id}",
-        json=schemas.SceneUpdate(name="new-name").model_dump(
+        json=deprecated_schemas.SceneUpdate(name="new-name").model_dump(
             exclude_unset=True,
             by_alias=True,
             mode="json",
@@ -90,7 +90,7 @@ async def test_scene_crud(
     # [3.1] update full and move to another project
     response = await client.patch(
         f"/api/scenes/{scene_id}",
-        json=schemas.SceneUpdate(
+        json=deprecated_schemas.SceneUpdate(
             elements=["element"],
             app_state={"key": "value"},
             type="type",
@@ -108,7 +108,7 @@ async def test_scene_crud(
     # move back
     response = await client.patch(
         f"/api/scenes/{scene_id}",
-        json=schemas.SceneUpdate(
+        json=deprecated_schemas.SceneUpdate(
             project=str(project_id),
         ).model_dump(exclude_unset=True, by_alias=True, mode="json"),
     )
@@ -222,13 +222,13 @@ async def test_scene_crud_with_files(
     # [1] create scene
     response = await client.post(
         "/api/scenes",
-        content=schemas.SceneCreate(
+        content=deprecated_schemas.SceneCreate(
             name="test-scene",
             project_id=project_id,
             app_state={"key": "value"},
             elements=[{"type": "some-element-type"}],
             files=[
-                schemas.FileCreate(
+                deprecated_schemas.FileCreate(
                     file_id="initial-file-id",
                     type="mimeType",
                     data="dataURL",
@@ -296,7 +296,7 @@ async def test_scene_crud_with_files(
     # create new project
     response = await client.post(
         "/api/projects",
-        json=schemas.ProjectCreate(name="test-project").model_dump(
+        json=deprecated_schemas.ProjectCreate(name="test-project").model_dump(
             exclude_unset=True,
             by_alias=True,
             mode="json",
@@ -308,7 +308,7 @@ async def test_scene_crud_with_files(
     # copy scene (with new name)
     response = await client.post(
         f"/api/scenes/{scene_id}/copy",
-        json=schemas.SceneCreate(
+        json=deprecated_schemas.SceneCreate(
             project_id=project_id,
             name="copied",
         ).model_dump(mode="json", exclude_unset=True, by_alias=True),
@@ -370,7 +370,7 @@ async def test_scene_crud_with_files(
     # copy scene (with new name)
     response = await another_client.post(
         f"/api/scenes/{scene_id}/copy",
-        json=schemas.SceneCreate(
+        json=deprecated_schemas.SceneCreate(
             project_id=project_id,
             name="copied-to-another-user",
         ).model_dump(mode="json", exclude_unset=True, by_alias=True),

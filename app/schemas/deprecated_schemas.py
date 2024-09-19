@@ -4,35 +4,45 @@ import uuid
 from typing import Literal, TypeAlias
 
 import fastapi_users
-from pydantic import Field
+from pydantic import ConfigDict, Field
+from typing_extensions import deprecated
 
 from common.schemas.base import ITEM_PG_ID, BaseSchema
 
-from .base import (
-    CreateSchemaMixin,
-    DeclarativeFieldsMixin,
-    ItemsResponseBase,
-    UpdateSchemaMixin,
-)
+from .base import CreateSchemaMixin, DeclarativeFieldsMixin, UpdateSchemaMixin
+
+
+@deprecated("")
+class FiltersBase(BaseSchema):
+    created_by_id: uuid.UUID | Literal["current_user"] | Literal[""] = Field(
+        default="current_user",
+        alias="user_id",
+    )
+    is_deleted: bool | None = None
+
 
 ########################################################################################
 # users
 ########################################################################################
 
 
+@deprecated("")
 class _UserFieldsMixin(BaseSchema):
     username: str | None = None
     role: str | None = None
 
 
+@deprecated("")
 class User(fastapi_users.schemas.BaseUser[uuid.UUID], _UserFieldsMixin):
     pass
 
 
+@deprecated("")
 class UserCreate(fastapi_users.schemas.BaseUserCreate, _UserFieldsMixin):
     pass
 
 
+@deprecated("")
 class UserUpdate(fastapi_users.schemas.BaseUserUpdate, _UserFieldsMixin):
     pass
 
@@ -42,6 +52,7 @@ class UserUpdate(fastapi_users.schemas.BaseUserUpdate, _UserFieldsMixin):
 ########################################################################################
 
 
+@deprecated("")
 class Project(BaseSchema, DeclarativeFieldsMixin):
     name: str
 
@@ -49,14 +60,17 @@ class Project(BaseSchema, DeclarativeFieldsMixin):
     scenes: list[SceneSimplified]
 
 
+@deprecated("")
 class ProjectSimplified(Project, DeclarativeFieldsMixin, exclude={"scenes"}):
     pass
 
 
+@deprecated("")
 class ProjectCreate(Project, CreateSchemaMixin, exclude={"scenes"}):
     pass
 
 
+@deprecated("")
 class ProjectUpdate(
     Project,
     UpdateSchemaMixin,
@@ -66,7 +80,8 @@ class ProjectUpdate(
     pass
 
 
-class GetProjectsResponse(ItemsResponseBase[Project]):
+@deprecated("")
+class ProjectFilters(FiltersBase):
     pass
 
 
@@ -74,33 +89,38 @@ class GetProjectsResponse(ItemsResponseBase[Project]):
 # files
 ########################################################################################
 
-FileID: TypeAlias = str
+FileId: TypeAlias = str
 
 
+@deprecated("")
 class FileSimplified(BaseSchema, DeclarativeFieldsMixin):
     # NOTE:
     # Postgres UUID - not required, using `file_id` for get / post requests
-    file_id: FileID = Field(
+    file_id: FileId = Field(
         description="Excalidraw file id",
-        # NOTE
-        # cannot use simple alias='id', as it would be populated from PG id value in first
-        # place, not from 'file_id' column
+        # alias='id',
         validation_alias="file_id",  # from database
         serialization_alias="id",  # to Excalidraw
     )
     type: str | None = Field(None, alias="mimeType")
 
 
+@deprecated("")
 class FileExtended(FileSimplified):
     data: str = Field(alias="dataURL")
 
 
+@deprecated("")
 class FileCreate(FileExtended, CreateSchemaMixin):
-    file_id: FileID = Field(
+    file_id: FileId = Field(
+        # alias='id',
         description="Excalidraw file id",
         validation_alias="id",  # from Excalidraw
         serialization_alias="file_id",  # to Database
     )
+
+    # BACKWARDS CAPABILITY
+    model_config = ConfigDict(extra="ignore")
 
 
 ########################################################################################
@@ -108,6 +128,7 @@ class FileCreate(FileExtended, CreateSchemaMixin):
 ########################################################################################
 
 
+@deprecated("")
 class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     name: str
 
@@ -116,6 +137,7 @@ class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     project_id: uuid.UUID  # DEPRECATED self.project should be used
 
 
+@deprecated("")
 class SceneExtended(SceneSimplified):
     elements: list
     app_state: dict = Field(alias="appState")
@@ -129,6 +151,7 @@ class SceneExtended(SceneSimplified):
     source: str | None = None
 
 
+@deprecated("")
 class SceneCreate(SceneExtended, CreateSchemaMixin, exclude={"project"}):
     elements: list = []
     app_state: dict = Field(default={}, alias="appState")
@@ -138,6 +161,7 @@ class SceneCreate(SceneExtended, CreateSchemaMixin, exclude={"project"}):
     project: ITEM_PG_ID = Field(alias="project_id")
 
 
+@deprecated("")
 class SceneUpdate(
     SceneExtended,
     UpdateSchemaMixin,
@@ -150,40 +174,7 @@ class SceneUpdate(
     project: ITEM_PG_ID = Field(alias="project_id")
 
 
-class GetScenesResponse(ItemsResponseBase[SceneExtended]):
-    pass
-
-
-########################################################################################
-# Elements
-########################################################################################
-
-
-class Element(BaseSchema, extra="allow"):
-    ...
-
-
-class GetElementsResponse(ItemsResponseBase[Element]):
-    next_sync_token: str | None = None
-
-
-########################################################################################
-# Filters
-########################################################################################
-
-
-class FiltersBase(BaseSchema):
-    created_by_id: uuid.UUID | Literal["current_user"] | Literal[""] = Field(
-        default="current_user",
-        alias="user_id",
-    )
-    is_deleted: bool | None = None
-
-
-class ProjectFilters(FiltersBase):
-    pass
-
-
+@deprecated("")
 class SceneFilters(FiltersBase):
     project_id: uuid.UUID | None = None
 
@@ -193,10 +184,11 @@ class SceneFilters(FiltersBase):
 ########################################################################################
 
 
+@deprecated("")
 class SceneJsonFilePersistence(BaseSchema):  # from .objective JSON files
     type: str | None = None
     version: int | None = None
     source: str | None = None
     elements: list = []
     app_state: dict = Field(default={}, alias="appState")
-    files: dict[FileID, FileCreate]
+    files: dict[FileId, FileCreate]

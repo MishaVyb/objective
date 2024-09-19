@@ -1,8 +1,9 @@
 import uuid
+from typing import Generic, TypeVar
 
 from pydantic import AwareDatetime, Field
 
-from common.schemas.base import ModelConstructor
+from common.schemas.base import BaseSchema, ModelConstructor
 
 
 class DeclarativeFieldsMixin(ModelConstructor):
@@ -26,10 +27,17 @@ class CreateSchemaMixin(
 class UpdateSchemaMixin(
     DeclarativeFieldsMixin,
     # NOTE
-    # it allows DELETE instances by PATCH method
+    # it allows DELETE instances by UPDATE
     exclude=set(DeclarativeFieldsMixin.model_fields) - {"is_deleted"},
     optional={"is_deleted"},
 ):
     @property
     def is_update_recover(self) -> bool:
         return "is_deleted" in self.model_fields_set and self.is_deleted == False
+
+
+_T = TypeVar("_T", bound=BaseSchema)
+
+
+class ItemsResponseBase(BaseSchema, Generic[_T]):
+    items: list[_T]

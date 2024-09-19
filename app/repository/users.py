@@ -13,12 +13,11 @@ from app.schemas import schemas
 from . import models
 
 if TYPE_CHECKING:
+    from app.dependencies.users import AuthenticatedUser
     from app.repository.repositories import DatabaseRepositories
 else:
     DatabaseRepositories = object
-
-# NOTE
-# another module to resolve circular imports from 'repositories.py'
+    AuthenticatedUser = object
 
 
 class UserRepository(SQLAlchemyUserDatabase[models.User, uuid.UUID]):
@@ -26,6 +25,10 @@ class UserRepository(SQLAlchemyUserDatabase[models.User, uuid.UUID]):
 
     def __init__(self, session: SessionDepends):
         super().__init__(session, self.model)
+
+    @property
+    def current_user(self) -> AuthenticatedUser:
+        return self.request.state.current_user
 
     # override to using 'flush' instead of 'commit':
 

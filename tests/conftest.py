@@ -22,7 +22,7 @@ from app.dependencies.users import UserManagerContext
 from app.main import setup
 from app.repository.models import Base
 from app.repository.repositories import DatabaseRepositories
-from app.schemas import schemas
+from app.schemas import deprecated_schemas
 from tests.helpers import (
     create_and_drop_tables_by_alembic,
     create_and_drop_tables_by_metadata,
@@ -174,13 +174,13 @@ async def database_context(
 # Users / Clients
 ########################################################################################
 
-USER_A = schemas.UserCreate(
+USER_A = deprecated_schemas.UserCreate(
     email="user_a@test.com",
     password="password",
     username="user_a",
     role="string",
 )
-USER_B = schemas.UserCreate(
+USER_B = deprecated_schemas.UserCreate(
     email="user_b@test.com",
     password="password",
     username="user_b",

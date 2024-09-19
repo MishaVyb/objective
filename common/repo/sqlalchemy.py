@@ -318,14 +318,14 @@ class SQLAlchemyRepository(
 
     async def get_filter(
         self,
-        filter_: BaseSchema | None = None,
+        filters: BaseSchema | None = None,
         *,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         is_deleted: bool = False,
         **extra_filters,
     ) -> list[_SchemaType]:
         stm = self._use_statement_get_instances_list(
-            filter_=filter_,
+            filters=filters,
             options=options,
             is_deleted=is_deleted,
             **extra_filters,
@@ -335,12 +335,12 @@ class SQLAlchemyRepository(
 
     def _use_statement_get_instances_list(  # separate method for inheritance override
         self,
-        filter_: BaseSchema | None = None,
+        filters: BaseSchema | None = None,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         is_deleted: bool = False,
         **extra_filters,
     ) -> Select:
-        filters = self._use_filter(filter_, **extra_filters)
+        filters = self._use_filters(filters, **extra_filters)
         options = self._use_options(options)
 
         self.logger.debug("[DATABASE] Querying %r %s. ", self, filters)
@@ -506,11 +506,11 @@ class SQLAlchemyRepository(
         payload_values = payload.model_dump(include=payload_fields)
         return payload_values | extra_values
 
-    def _use_filter(self, filter_: BaseSchema | None, **extra_filters) -> dict:
-        if not filter_:
+    def _use_filters(self, filters: BaseSchema | None, **extra_filters) -> dict:
+        if not filters:
             result_filters = extra_filters
         else:
-            result_filters = filter_.model_dump(exclude_unset=True) | extra_filters
+            result_filters = filters.model_dump(exclude_unset=True) | extra_filters
 
         return result_filters
 

@@ -291,7 +291,7 @@ class ModelConstructor(BaseModel):
         payload: BaseModel | None = None,
         *,
         _payload_exclude: set[str] | None = None,
-        _payload_exclude_unset: bool = False,
+        _payload_exclude_unset: bool = True,
         _payload_exclude_none: bool = False,
         _payload_exclude_defaults: bool = False,
         **extra_values,

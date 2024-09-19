@@ -1,6 +1,6 @@
 from dataclasses import dataclass, fields
 from logging import Logger
-from typing import TYPE_CHECKING, Annotated, Generic, Never, Self, Sequence
+from typing import TYPE_CHECKING, Annotated, Any, Never, Self, Sequence
 from uuid import UUID
 
 from fastapi import Depends
@@ -11,6 +11,7 @@ from typing_extensions import deprecated
 
 from app.config import AppSettings
 from app.repository.users import UserRepository
+from app.schemas.schemas import FileID
 from common.fastapi.exceptions.exceptions import NotEnoughRights
 from common.repo.sqlalchemy import (
     _CLASS_DEFAULT,
@@ -31,29 +32,32 @@ else:
     ObjectiveAPP = object
     ObjectiveRequest = object
 
+_CURRENT_USER: Any = object()
+
 
 # NOTE: Specific for Objective service only (not common)
 # TODO move to service
 class RepositoryBase(
-    SQLAlchemyRepository,
-    Generic[_ModelType, _SchemaType, _CreateSchemaType, _UpdateSchemaType],
+    SQLAlchemyRepository[_ModelType, _SchemaType, _CreateSchemaType, _UpdateSchemaType],
 ):
-    def _use_filter(self, filter_: schemas.FiltersBase | None, **extra_filters) -> dict:
-        if filter_:
+    def _use_filters(
+        self, filters: schemas.FiltersBase | None, **extra_filters
+    ) -> dict:
+        if filters:
 
             # default filters:
-            if "is_deleted" not in filter_.model_fields_set:
-                filter_.is_deleted = False
-            if "created_by_id" not in filter_.model_fields_set:
-                filter_.created_by_id = self.current_user.id
+            if "is_deleted" not in filters.model_fields_set:
+                filters.is_deleted = False
+            if "created_by_id" not in filters.model_fields_set:
+                filters.created_by_id = self.current_user.id
 
             # filters modifications:
-            if filter_.created_by_id == "":
-                filter_ = filter_.model_remake(_self_exclude={"created_by_id"})
-            if filter_.created_by_id == "current_user":
-                filter_.created_by_id = self.current_user.id
+            if filters.created_by_id == "current_user":
+                filters.created_by_id = self.current_user.id
+            if filters.created_by_id == "":
+                filters = filters.model_remake(_self_exclude={"created_by_id"})
 
-        return super()._use_filter(filter_, **extra_filters)
+        return super()._use_filters(filters, **extra_filters)
 
     async def update(
         self,
@@ -168,6 +172,14 @@ class FileRepository(
 ):
     model = models.File
     schema = schemas.FileExtended
+
+    async def get_one(self, file_id: FileID, **extra) -> schemas.FileExtended:
+        return await super().get_one(file_id=file_id, **extra)
+
+    async def get_one_or_none(
+        self, file_id: FileID, **extra
+    ) -> schemas.FileExtended | None:
+        return await super().get_one_or_none(file_id=file_id, **extra)
 
 
 @dataclass(kw_only=True)

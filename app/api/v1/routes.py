@@ -9,7 +9,7 @@ from app.dependencies.users import AuthRouterDepends, AuthUserDepends
 from app.exceptions import NotFoundInstanceError
 from app.repository import models
 from app.repository.repositories import DatabaseRepositoriesDepends
-from app.schemas import schemas
+from app.schemas import deprecated_schemas
 from common.fastapi.monitoring.base import LoggerDepends
 
 ########################################################################################
@@ -24,7 +24,7 @@ projects = APIRouter(
 )
 
 
-class _ProjectFiltersQuery(schemas.ProjectFilters, as_query=True):
+class _ProjectFiltersQuery(deprecated_schemas.ProjectFilters, as_query=True):
     pass
 
 
@@ -33,7 +33,7 @@ async def get_projects(
     db: DatabaseRepositoriesDepends,
     *,
     filters: Annotated[_ProjectFiltersQuery, Depends()],
-) -> list[schemas.Project]:
+) -> list[deprecated_schemas.Project]:
     """Get projects. Apply filters."""
     return await db.projects.get_filter(filters)
 
@@ -43,7 +43,7 @@ async def get_project(
     db: DatabaseRepositoriesDepends,
     *,
     id: UUID,
-) -> schemas.Project:
+) -> deprecated_schemas.Project:
     return await db.projects.get(id)
 
 
@@ -51,8 +51,8 @@ async def get_project(
 async def create_project(
     db: DatabaseRepositoriesDepends,
     *,
-    schema: schemas.ProjectCreate,
-) -> schemas.Project:
+    schema: deprecated_schemas.ProjectCreate,
+) -> deprecated_schemas.Project:
     return await db.projects.create(schema)
 
 
@@ -61,8 +61,8 @@ async def update_project(
     db: DatabaseRepositoriesDepends,
     *,
     id: UUID,
-    schema: schemas.ProjectUpdate,
-) -> schemas.Project:
+    schema: deprecated_schemas.ProjectUpdate,
+) -> deprecated_schemas.Project:
     return await db.projects.update(id, schema)
 
 
@@ -71,7 +71,7 @@ async def delete_project(
     db: DatabaseRepositoriesDepends,
     *,
     id: UUID,
-) -> schemas.Project:
+) -> deprecated_schemas.Project:
     """Mark as deleted."""
     return await db.projects.update(id, is_deleted=True)
 
@@ -83,7 +83,7 @@ async def delete_project(
 scenes = APIRouter(prefix="/scenes", tags=["Scenes"], dependencies=[AuthRouterDepends])
 
 
-class _SceneFiltersQuery(schemas.SceneFilters, as_query=True):
+class _SceneFiltersQuery(deprecated_schemas.SceneFilters, as_query=True):
     pass
 
 
@@ -92,8 +92,10 @@ async def get_scenes(
     db: DatabaseRepositoriesDepends,
     *,
     filters: Annotated[_SceneFiltersQuery, Depends()],
-) -> list[schemas.SceneExtended]:
+) -> list[deprecated_schemas.SceneExtended]:
     """Get scenes. Apply filters."""
+    aaa = await db.scenes.get_all()
+    bbb = await db.scenes.get_where(project_id=filters.project_id)
     scenes = await db.scenes.get_filter(filters)
     return [scene for scene in scenes if not scene.project.is_deleted]  # TMP
 
@@ -103,7 +105,7 @@ async def get_scene(
     db: DatabaseRepositoriesDepends,
     *,
     scene_id: UUID,
-) -> schemas.SceneExtended:
+) -> deprecated_schemas.SceneExtended:
     return await db.scenes.get(scene_id)
 
 
@@ -112,8 +114,8 @@ async def create_scene(
     db: DatabaseRepositoriesDepends,
     user: AuthUserDepends,
     *,
-    schema: schemas.SceneCreate,
-) -> schemas.SceneExtended:
+    schema: deprecated_schemas.SceneCreate,
+) -> deprecated_schemas.SceneExtended:
     # TODO move to repository impl
     files = [models.File(created_by_id=user.id, **f.model_dump()) for f in schema.files]
     return await db.scenes.create(schema, refresh=True, files=files)
@@ -125,20 +127,20 @@ async def copy_scene(
     user: AuthUserDepends,
     *,
     scene_id: UUID,
-    schema: schemas.SceneUpdate,  # overrides
-) -> schemas.SceneExtended:
+    schema: deprecated_schemas.SceneUpdate,  # overrides
+) -> deprecated_schemas.SceneExtended:
     """Duplicate scene. Supports overrides. All scene files are copied too."""
 
     # TODO move to repository impl
     # REFACTOR !!!!!!!
 
     original = await db.scenes.get(scene_id)
-    orig_schema = schemas.SceneExtended.model_validate(original)
+    orig_schema = deprecated_schemas.SceneExtended.model_validate(original)
 
     data = orig_schema.model_dump(exclude_unset=True, exclude={"files"})
     data |= schema.model_dump(exclude_unset=True, exclude={"files"})
 
-    tasks: list[Task[schemas.FileExtended]] = []
+    tasks: list[Task[deprecated_schemas.FileExtended]] = []
     async with TaskGroup() as tg:
         for file in original.files:
             coro = db.files.get_one(scene_id=scene_id, file_id=file.file_id)
@@ -151,14 +153,14 @@ async def copy_scene(
         models.File(
             **f.model_dump(
                 # id / user_id / created_at ...
-                exclude=set(schemas.DeclarativeFieldsMixin.model_fields),
+                exclude=set(deprecated_schemas.DeclarativeFieldsMixin.model_fields),
             ),
             created_by_id=user.id,
         )
         for f in original_files
     ]
     instance = await db.scenes.create(
-        schemas.SceneCreate.model_build(**data),
+        deprecated_schemas.SceneCreate.model_build(**data),
         files=copied_files,
         refresh=True,
     )
@@ -170,8 +172,8 @@ async def update_scene(
     scene_id: UUID,
     db: DatabaseRepositoriesDepends,
     *,
-    schema: schemas.SceneUpdate,
-) -> schemas.SceneExtended:
+    schema: deprecated_schemas.SceneUpdate,
+) -> deprecated_schemas.SceneExtended:
     return await db.scenes.update(scene_id, schema)
 
 
@@ -180,7 +182,7 @@ async def delete_scene(
     db: DatabaseRepositoriesDepends,
     *,
     scene_id: UUID,
-) -> schemas.SceneSimplified:
+) -> deprecated_schemas.SceneSimplified:
     """Mark as deleted."""
     return await db.scenes.update(scene_id, is_deleted=True)
 
@@ -200,7 +202,7 @@ async def get_file(
     *,
     scene_id: UUID,
     file_id: str,
-) -> schemas.FileExtended:
+) -> deprecated_schemas.FileExtended:
     try:
         return await db.files.get_one(scene_id=scene_id, file_id=file_id)
     except NotFoundInstanceError as e:
@@ -222,8 +224,8 @@ async def create_file(
     logger: LoggerDepends,
     *,
     scene_id: UUID,
-    schema: schemas.FileCreate,
-) -> schemas.FileSimplified:
+    schema: deprecated_schemas.FileCreate,
+) -> deprecated_schemas.FileSimplified:
     try:
         # NOTE: handle multiply requests with the same file from frontend
         f = await db.files.get_one(scene_id=scene_id, file_id=schema.file_id)

@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from starlette import status
 
 from app.repository.repositories import ProjectRepository
-from app.schemas import schemas
+from app.schemas import deprecated_schemas
 from tests_old.conftest import ClientsFixture
 from tests_old.utils import verbose
 
@@ -44,7 +44,7 @@ async def test_project_crud(client: AsyncClient) -> None:
     # [1] create
     response = await client.post(
         "/api/projects",
-        json=dict(schemas.ProjectCreate(name="test-project")),
+        json=dict(deprecated_schemas.ProjectCreate(name="test-project")),
     )
     assert response.status_code == status.HTTP_201_CREATED, verbose(response)
     json = response.json()
@@ -69,7 +69,7 @@ async def test_project_crud(client: AsyncClient) -> None:
     # [3] update
     response = await client.patch(
         f"/api/projects/{id}",
-        json=schemas.ProjectUpdate(name="new-name").model_dump(
+        json=deprecated_schemas.ProjectUpdate(name="new-name").model_dump(
             by_alias=True,
             exclude_unset=True,
             mode="json",
@@ -111,7 +111,7 @@ async def test_project_crud(client: AsyncClient) -> None:
     # [5] recover
     response = await client.patch(
         f"/api/projects/{id}",
-        json=schemas.ProjectUpdate(is_deleted=False).model_dump(
+        json=deprecated_schemas.ProjectUpdate(is_deleted=False).model_dump(
             by_alias=True,
             exclude_unset=True,
             mode="json",

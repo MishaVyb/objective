@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-from app.schemas import schemas
+from app.schemas import deprecated_schemas
 from common.fastapi.exceptions import SentryExceptionsHandlers
 from common.fastapi.monitoring.base import JournalRecordMiddleware
 from common.fastapi.monitoring.sentry import (
@@ -37,7 +37,9 @@ def setup_initial_scenes(app: ObjectiveAPP) -> None:
     scenes = []
     for filepath in app.state.settings.USERS_INITIAL_SCENES:
         with open(filepath) as file:
-            scene = schemas.SceneJsonFilePersistence.model_validate_json(file.read())
+            scene = deprecated_schemas.SceneJsonFilePersistence.model_validate_json(
+                file.read(),
+            )
             scenes.append(scene)
     app.state.initial_scenes = scenes
 
@@ -84,7 +86,7 @@ class ObjectiveAPP(FastAPI):
 
         class State(fastapi.datastructures.State):
             settings: AppSettings
-            initial_scenes: list[schemas.SceneJsonFilePersistence]
+            initial_scenes: list[deprecated_schemas.SceneJsonFilePersistence]
 
             current_user: AuthenticatedUser
             engine: AsyncEngine
