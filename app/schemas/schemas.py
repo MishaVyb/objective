@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Literal, TypeAlias
+from typing import Annotated, Literal
 
 import fastapi_users
 from pydantic import Field
@@ -74,21 +74,13 @@ class GetProjectsResponse(ItemsResponseBase[Project]):
 # files
 ########################################################################################
 
-FileID: TypeAlias = str
+FileID = Annotated[str, ...]
+"""File id length equals 40 to align with the HEX length of SHA-1 (which is 160 bit). """
 
 
 class FileSimplified(BaseSchema, DeclarativeFieldsMixin):
-    # NOTE:
-    # Postgres UUID - not required, using `file_id` for get / post requests
-    file_id: FileID = Field(
-        description="Excalidraw file id",
-        # NOTE
-        # cannot use simple alias='id', as it would be populated from PG id value in first
-        # place, not from 'file_id' column
-        validation_alias="file_id",  # from database
-        serialization_alias="id",  # to Excalidraw
-    )
-    type: str | None = Field(None, alias="mimeType")
+    id: FileID
+    type: str = Field(alias="mimeType")
 
 
 class FileExtended(FileSimplified):
@@ -96,11 +88,7 @@ class FileExtended(FileSimplified):
 
 
 class FileCreate(FileExtended, CreateSchemaMixin):
-    file_id: FileID = Field(
-        description="Excalidraw file id",
-        validation_alias="id",  # from Excalidraw
-        serialization_alias="file_id",  # to Database
-    )
+    pass
 
 
 ########################################################################################
@@ -116,34 +104,36 @@ class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
 
 
 class SceneExtended(SceneSimplified):
-    elements: list
-    app_state: dict = Field(alias="appState")
-
     # relations:
     project: ProjectSimplified
 
-    # other (unused)
+    # Excalidraw:
+    elements: list[Element]
+    app_state: AppState = Field(alias="appState")
+
+    # Excalidraw other # UNUSED
     type: str | None = None
     version: int | None = None
     source: str | None = None
 
 
-class SceneCreate(SceneExtended, CreateSchemaMixin, exclude={"project"}):
-    elements: list = []
-    app_state: dict = Field(default={}, alias="appState")
-
-    # relations:
-    files: list[FileCreate] = []
+class SceneCreate(
+    SceneExtended,
+    CreateSchemaMixin,
+    exclude={"project"},
+    optional={"elements", "app_state"},
+):
+    files: list[FileCreate] = []  # for creating scenes from '.objective' file
     project_id: ITEM_PG_ID
 
 
 class SceneUpdate(
     SceneExtended,
     UpdateSchemaMixin,
-    optional=SceneExtended.model_fields,
+    optional=SceneCreate.model_fields,
+    exclude={"project", "elements"},
 ):
-    # relations
-    project: ITEM_PG_ID = Field(alias="project_id")
+    project_id: ITEM_PG_ID | None = None  # move scene to another project
 
 
 class GetScenesResponse(ItemsResponseBase[SceneExtended]):
@@ -151,12 +141,41 @@ class GetScenesResponse(ItemsResponseBase[SceneExtended]):
 
 
 ########################################################################################
-# Elements
+# AppState/Elements
 ########################################################################################
 
 
-class Element(BaseSchema, extra="allow"):
+class AppState(BaseSchema, extra="allow"):
     ...
+
+
+class Element(BaseSchema, extra="allow"):
+    id: str
+    ...
+
+    # Meta for synchronization
+    seed: int = 1
+    """
+    Random integer used to seed shape generation so that the roughness shape
+    doesn't differ across renders.
+    """
+    version: int = 1
+    """
+    Integer that is sequentially incremented on each change. Used to reconcile
+    elements during collaboration or when saving to server.
+    """
+    version_nonce: int = 1
+    """
+    Random integer that is regenerated on each change.
+    Used for deterministic reconciliation of updates during collaboration,
+    in case the versions (see above) are identical.
+    """
+    updated: int = 1
+    """Epoch (ms) timestamp of last element update. """
+
+    # ExcalidrawImageElement props
+    file_id: str | None = None
+    status: Literal["pending"] | Literal["saved"] | Literal["error"] = "saved"
 
 
 class GetElementsResponse(ItemsResponseBase[Element]):

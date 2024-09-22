@@ -129,7 +129,6 @@ class DeclarativeFieldsMixin(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         # GUID, # ???
         primary_key=True,
-        # server_default=func.uuid_generate_v4(),
         default=lambda: uuid.uuid4(),
     )
     created_at: Mapped[datetime] = mapped_column(

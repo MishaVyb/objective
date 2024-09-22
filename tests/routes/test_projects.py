@@ -1,155 +1,150 @@
+import logging
 import uuid
-from pprint import pprint
 
 import pytest
-from httpx import AsyncClient
+from dirty_equals import IsDatetime, IsList
+from fastapi import HTTPException
 from starlette import status
 
+from app.applications.objective import ObjectiveAPP
 from app.client import ObjectiveClient
+from app.exceptions import NotFoundInstanceError
 from app.repository.repositories import ProjectRepository
-from app.schemas import deprecated_schemas
-from tests_old.conftest import ClientsFixture
-from tests_old.utils import verbose
+from app.schemas import schemas
+from common.fastapi.exceptions.exceptions import NotEnoughRights
+from tests.helpers import IsPartialSchema
 
 pytestmark = [
     pytest.mark.anyio,
 ]
 
 
-async def test_default_project(client: ObjectiveClient) -> None:
-    # [1] get all
-    response = await client.get_projects()
-    return
+logger = logging.getLogger("conftest")
 
-    json = response.json()
-    pprint(json)
-    assert len(json) == 1
-    assert json[0]["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
+# TMP
+_DEFAULT_PROJECT_NAME = ProjectRepository.DEFAULT_PROJECT_NAME
+_DEFAULT_PROJECTS_AMOUNT = 1
+_DEFAULT_SCENES_AMOUNT = 2
 
-    # default scenes:
-
-    # assert json[0]["scenes"][0]["files"] # DEPRECATED
-    assert json[0]["scenes"][0]["name"]
-
-    scene_id = json[0]["scenes"][0]["id"]
-    response = await client.get(f"/api/scenes/{scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-
-    assert json["appState"]
-    assert json["elements"]
+# DATA
+TEST_PROJECT = schemas.ProjectCreate(name="test-project")
 
 
-async def test_project_crud(client: AsyncClient) -> None:
+async def test_default_project(app: ObjectiveAPP, client: ObjectiveClient) -> None:
+    file_ids = [file for scene in app.state.initial_scenes for file in scene.files]
+
+    # check project
+    result = await client.get_projects()
+    assert result.items == [
+        IsPartialSchema(
+            name=_DEFAULT_PROJECT_NAME,
+            scenes=IsList(length=_DEFAULT_SCENES_AMOUNT),
+        ),
+    ]
+
+    # check scenes
+    result = await client.get_scenes()
+    assert result.items == IsList(length=_DEFAULT_SCENES_AMOUNT)
+
+    # check files
+    for file_id in file_ids:
+        res = await client.get_file(file_id)
+        assert res.data
+
+
+async def test_project_crud(
+    client: ObjectiveClient,
+    setup_users: dict,
+) -> None:
+    user_A, user_B = setup_users[1], setup_users[2]
+
     # [1] create
-    response = await client.post(
-        "/api/projects",
-        json=dict(deprecated_schemas.ProjectCreate(name="test-project")),
+    result = await client.create_project(TEST_PROJECT)
+    assert result == IsPartialSchema(name=TEST_PROJECT.name)
+
+    result = await client.get_project(result.id)
+    assert result == IsPartialSchema(name=TEST_PROJECT.name)
+
+    results = await client.get_projects()
+    assert results.items == [
+        IsPartialSchema(name=_DEFAULT_PROJECT_NAME),  # default
+        IsPartialSchema(name=TEST_PROJECT.name),
+    ]
+
+    # [2] update
+    result = await client.update_project(result.id, schemas.ProjectUpdate(name="upd"))
+    assert result == IsPartialSchema(
+        created_at=IsDatetime(),
+        updated_at=IsDatetime(),
+        created_by_id=user_A.id,
+        updated_by_id=user_A.id,
+        name="upd",
     )
-    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
-    json = response.json()
-    pprint(json)
-    id = json["id"]
 
-    # [2] read
-    response = await client.get("/api/projects")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    result = await client.get_project(result.id)
+    assert result == IsPartialSchema(name="upd")
 
-    json = response.json()
-    pprint(json)
-    assert len(json) == 2  # default and new one
+    # [3] delete
+    result = await client.delete_project(result.id)
+    assert result == IsPartialSchema(name="upd", is_deleted=True)
 
-    # [2.1] read by id
-    response = await client.get(f"/api/projects/{id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-
-    json = response.json()
-    pprint(json)
-
-    # [3] update
-    response = await client.patch(
-        f"/api/projects/{id}",
-        json=deprecated_schemas.ProjectUpdate(name="new-name").model_dump(
-            by_alias=True,
-            exclude_unset=True,
-            mode="json",
-        ),
+    # [4] recover
+    result = await client.update_project(
+        result.id,
+        schemas.ProjectUpdate(is_deleted=False),
     )
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    pprint(json)
-
-    response = await client.get(f"/api/projects/{id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert json["name"] == "new-name"
-
-    # [4] delete
-    response = await client.delete(f"/api/projects/{id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    pprint(json)
-
-    # get without filters -- only not deleted
-    response = await client.get(f"/api/projects")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert len(json) == 1  # only not deleted
-
-    response = await client.get(f"/api/projects", params={"is_deleted": True})
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert len(json) == 1  # only deleted
-    assert json[0]["name"] == "new-name"
-
-    response = await client.get(f"/api/projects", params={"is_deleted": False})
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert len(json) == 1  # only default
-    assert json[0]["name"] == ProjectRepository.DEFAULT_PROJECT_NAME
-
-    # [5] recover
-    response = await client.patch(
-        f"/api/projects/{id}",
-        json=deprecated_schemas.ProjectUpdate(is_deleted=False).model_dump(
-            by_alias=True,
-            exclude_unset=True,
-            mode="json",
-        ),
-    )
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    pprint(json)
-
-    response = await client.get(f"/api/projects/{id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert json["is_deleted"] is False
+    assert result == IsPartialSchema(name="upd", is_deleted=False)
 
 
-async def test_project_404(clients: ClientsFixture):
-    response = await clients.user.get(f"/api/projects/{uuid.uuid4()}")
-    assert response.status_code == status.HTTP_404_NOT_FOUND, verbose(response)
+async def test_project_filters(client: ObjectiveClient) -> None:
+    # arrange:
+    result = await client.create_project(TEST_PROJECT)
+    await client.delete_project(result.id)
+
+    # act:
+    results = await client.get_projects()
+    assert results.items == [
+        IsPartialSchema(name=_DEFAULT_PROJECT_NAME),  # default project
+        IsPartialSchema(name=TEST_PROJECT.name),  # deleted project
+    ]
+    results = await client.get_projects(schemas.ProjectFilters(is_deleted=False))
+    assert results.items == [
+        IsPartialSchema(name=_DEFAULT_PROJECT_NAME),  # default project
+        # IsPartialSchema(name=TEST_PROJECT.name),  # deleted project
+    ]
+    results = await client.get_projects(schemas.ProjectFilters(is_deleted=True))
+    assert results.items == [
+        # IsPartialSchema(name=_DEFAULT_PROJECT_NAME),  # default project
+        IsPartialSchema(name=TEST_PROJECT.name),  # deleted project
+    ]
 
 
-async def test_project_403(clients: ClientsFixture):
-    # someone else's project id:
-    id = (await clients.another_user.get("/api/projects")).json()[0]["id"]
+async def test_project_access_rights(
+    setup_users: dict,
+    setup_clients: dict[str | int, ObjectiveClient],
+):
+    user_A, user_B = setup_users[1], setup_users[2]
+    client_A, client_B = setup_clients[1], setup_clients[2]
+    project_A = (await client_A.get_projects()).items[0]
+    project_B = (await client_B.get_projects()).items[0]
 
-    # read
     # TMP anyone has read access to anything
-    response = await clients.user.get(f"/api/projects/{id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
+    result = await client_A.get_project(project_B.id)
+    assert result == IsPartialSchema(created_by_id=user_B.id)
 
-    # update
-    response = await clients.user.patch(f"/api/projects/{id}", json={"name": "name"})
-    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
-
-    # delete
-    response = await clients.user.delete(f"/api/projects/{id}")
-    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
+    # update/delete
+    with pytest.raises(NotEnoughRights):
+        await client_A.update_project(project_B.id, schemas.ProjectUpdate(name="upd"))
+    with pytest.raises(NotEnoughRights):
+        await client_A.delete_project(project_B.id)
 
 
-async def test_project_401(clients: ClientsFixture):
-    response = await clients.no_auth.get(f"/api/projects/{uuid.uuid4()}")
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED, verbose(response)
+async def test_project_401(setup_clients: dict[str | int, ObjectiveClient]):
+    with pytest.raises(HTTPException) as exc:
+        await setup_clients["unauthorized"].get_project(uuid.uuid4())
+    assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+async def test_project_404(client: ObjectiveClient):
+    with pytest.raises(NotFoundInstanceError):
+        await client.get_project(uuid.uuid4())

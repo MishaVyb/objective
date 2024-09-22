@@ -5,6 +5,8 @@ import uuid
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.schemas.schemas import FileID
+
 from .base import DeclarativeFieldsMixin
 from .users import User
 
@@ -41,12 +43,7 @@ class Element(DeclarativeFieldsMixin):
 
 
 class File(DeclarativeFieldsMixin):
-
-    # file data
-    file_id: Mapped[str] = mapped_column(
-        index=True,
-        unique=True,
-    )  # excalidraw(!) file id
+    id: Mapped[FileID] = mapped_column(primary_key=True, index=True, unique=True)
     type: Mapped[str]
     data: Mapped[str]  # VARCHAR ~ Postgres TEXT -- unlimited length (but up to 1gb)
 

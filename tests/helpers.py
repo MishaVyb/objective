@@ -124,37 +124,63 @@ class parametrize:
 ########################################################################################
 
 
-def _get_diff_lines(expected: Any, result: Any):
-    return difflib.ndiff(
-        pformat(expected).split("\n"),
-        pformat(result).split("\n"),
-    )
+class AssertionDifferenceMixin:
+    def get_operands(self, result: Any):
+        ...
+
+    def diff(self, result: dict | BaseModel | Any):
+        left, right = self.get_operands(result)
+        text = self._get_diff_text(left, right)
+        return f"\n{text}\n"
+
+    def diff_lines(self, result: dict | BaseModel | Any):
+        left, right = self.get_operands(result)
+        return self._get_diff_lines(left, right)
+
+    def _get_diff_lines(self, expected: Any, result: Any):
+        expected_lines = pformat(expected).split("\n")
+        result_lines = pformat(result).split("\n")
+        diff = difflib.ndiff(expected_lines, result_lines)
+        return [
+            "",
+            "========== DIFF ==========",
+            *list(diff),
+            "",
+            "========== EXPECTED ==========",
+            *expected_lines,
+            "",
+            "========== RESULT ==========",
+            *result_lines,
+        ]
+
+    def _get_diff_text(self, expected: Any, result: Any):
+        return "\n".join(self._get_diff_lines(expected, result))
 
 
-def _get_diff_text(expected: Any, result: Any):
-    return "\n".join(_get_diff_lines(expected, result))
-
-
-class IsPartialSchema(dirty_equals.IsPartialDict):
+class IsPartialSchema(dirty_equals.IsPartialDict, AssertionDifferenceMixin):
     def equals(self, other: dict | BaseModel) -> bool:
-        if not isinstance(other, BaseModel):
-            return super().equals(other)
+        data = self.use_result(other)
+        return super().equals(data)
 
-        data = other.model_dump()
+    def use_result(self, other: dict | BaseModel):
+        if not isinstance(other, BaseModel):
+            return other
+        result_data = other.model_dump()
 
         # supports for model properties, etc
         for attr in self.expected_values:
             if attr not in other.model_fields:
                 try:
-                    data[attr] = getattr(other, attr)
+                    result_data[attr] = getattr(other, attr)
                 except AttributeError:
                     pass
 
-        return super().equals(data)
+        return result_data
 
     def get_operands(self, other: dict | BaseModel | Any):
         if isinstance(other, BaseModel):
-            other = other.model_dump()
+            other = self.use_result(other)
+
         elif not isinstance(other, dict):
             return self.expected_values, other
 
@@ -165,11 +191,6 @@ class IsPartialSchema(dirty_equals.IsPartialDict):
             values = self._filter_dict(self.expected_values)
             other = self._filter_dict(other)
         return values, other
-
-    def diff(self, result: dict | BaseModel | Any):
-        left, right = self.get_operands(result)
-        text = _get_diff_text(left, right)
-        return f"\n{text}\n"
 
 
 class _NoItemClass:
@@ -182,7 +203,7 @@ ANY_LENGTH: Any = ...
 _T = TypeVar("_T")
 
 
-class IsList(dirty_equals.IsList, Generic[_T]):
+class IsList(dirty_equals.IsList, Generic[_T], AssertionDifferenceMixin):
     @classmethod
     def build(cls, obj: dirty_equals.IsList | list | None) -> Self | None:
         if obj is None:
@@ -224,11 +245,6 @@ class IsList(dirty_equals.IsList, Generic[_T]):
             r.append(result_item)
 
         return l, r
-
-    def diff(self, result: list | Any):
-        left, right = self.get_operands(result)
-        text = _get_diff_text(left, right)
-        return f"\n{text}\n"
 
 
 ########################################################################################

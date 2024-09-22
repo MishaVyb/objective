@@ -11,7 +11,6 @@ from typing_extensions import deprecated
 
 from app.config import AppSettings
 from app.repository.users import UserRepository
-from app.schemas.schemas import FileID
 from common.fastapi.exceptions.exceptions import NotEnoughRights
 from common.repo.sqlalchemy import (
     _CLASS_DEFAULT,
@@ -43,13 +42,16 @@ class RepositoryBase(
     db: "DatabaseRepositories"
 
     def _use_filters(
-        self, filters: schemas.FiltersBase | None, **extra_filters
+        self,
+        filters: schemas.FiltersBase | None,
+        *,
+        is_deleted: bool = False,  # UNUSED using is_deleted flag from request Query
+        **extra_filters,
     ) -> dict:
         if filters:
 
             # default filters:
-            if "is_deleted" not in filters.model_fields_set:
-                filters.is_deleted = False
+
             if "created_by_id" not in filters.model_fields_set:
                 filters.created_by_id = self.current_user.id
 
@@ -67,11 +69,12 @@ class RepositoryBase(
         payload: _UpdateSchemaType | None = None,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         flush: bool = False,
+        refresh: bool = False,
         **extra_values,
     ) -> _SchemaType:
 
         # check rights
-        res = await super().update(pk, payload, options, flush, **extra_values)
+        res = await super().update(pk, payload, options, flush, refresh, **extra_values)
         if self.current_user.id != res.created_by_id:
             raise NotEnoughRights(f"Not enough rights to update: {res}")
 
@@ -197,19 +200,16 @@ class SceneRepository(
         payload: schemas.SceneCreate,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         refresh: bool = False,
-        # *,
-        # project_id: uuid.UUID,
         **extra_values,
     ) -> schemas.SceneExtended:
         scene = await super().create(
             payload,
             options,
             refresh,
-            # project_id=project_id,
             **extra_values,
         )
         for file in payload.files:
-            if not await self.db.files.exist_where(file_id=file.file_id):
+            if not await self.db.files.exist_where(id=file.id):
                 await self.db.files.create(file)
         return scene  # do not refresh instance as Scene has not target relationship with Files
 
@@ -225,13 +225,10 @@ class FileRepository(
     model = models.File
     schema = schemas.FileExtended
 
-    async def get_one(self, file_id: FileID, **extra) -> schemas.FileExtended:
-        return await super().get_one(file_id=file_id, **extra)
-
-    async def get_one_or_none(
-        self, file_id: FileID, **extra
-    ) -> schemas.FileExtended | None:
-        return await super().get_one_or_none(file_id=file_id, **extra)
+    async def get(
+        self, pk: UUID, *, options: Sequence[ORMOption] = ..., refresh: bool = False
+    ) -> schemas.FileExtended:
+        raise NotImplementedError  # use get_one by id instead
 
 
 @dataclass(kw_only=True)

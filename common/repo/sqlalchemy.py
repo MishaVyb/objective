@@ -346,7 +346,7 @@ class SQLAlchemyRepository(
         is_deleted: bool = False,
         **extra_filters,
     ) -> Select:
-        filters = self._use_filters(filters, **extra_filters)
+        filters = self._use_filters(filters, is_deleted=is_deleted, **extra_filters)
         options = self._use_options(options)
 
         self.logger.debug("[DATABASE] Querying %r %s. ", self, filters)
@@ -409,7 +409,7 @@ class SQLAlchemyRepository(
         payload: _UpdateSchemaType | None = None,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         flush: bool = False,
-        # refresh: bool = False # TODO
+        refresh: bool = False,
         **extra_values,
     ) -> _SchemaType:
         data = self._use_payload_update(payload, **extra_values)
@@ -425,9 +425,11 @@ class SQLAlchemyRepository(
         for k, v in data.items():
             setattr(instance, k, v)
 
-        if flush:
+        if flush or refresh:
             self.logger.debug("[DATABASE] Flush: %s", instance)
             await self.session.flush([instance])
+        if refresh:
+            instance = await self._get_instance_refresh(instance.id, options)
         return self._use_result(instance)
 
     async def pending_update(

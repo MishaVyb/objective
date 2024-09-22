@@ -53,9 +53,9 @@ multi_line_output = 3
 
 [tool.pydantic-mypy]
 # https://docs.pydantic.dev/latest/integrations/mypy/#configuring-the-plugin
-init_forbid_extra = true
+init_forbid_extra = false
 init_typed = false
-warn_required_dynamic_aliases = false # TMP cor ModelConstructor
+warn_required_dynamic_aliases = true
 
 
 [tool.mypy]
@@ -84,6 +84,7 @@ implicit_optional = false
 # DISABLE SOME ERROR CODES (that are enabled by default):
 allow_redefinition = true
 disable_error_code = [
+    #https://mypy.readthedocs.io/en/stable/error_code_list.html#require-annotation-if-variable-type-is-unclear-var-annotated
     "var-annotated", # allows: foo = [], bar = {}
     "override",
     "assignment",

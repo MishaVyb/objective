@@ -59,7 +59,7 @@ async def update_project(
     id: UUID,
     payload: schemas.ProjectUpdate,
 ) -> schemas.Project:
-    return await db.projects.update(id, payload)
+    return await db.projects.update(id, payload, flush=True)
 
 
 @projects.delete("/{id}", status_code=status.HTTP_200_OK)
@@ -167,9 +167,9 @@ async def update_scene(
     scene_id: UUID,
     db: DatabaseRepositoriesDepends,
     *,
-    schema: schemas.SceneUpdate,
+    payload: schemas.SceneUpdate,
 ) -> schemas.SceneExtended:
-    return await db.scenes.update(scene_id, schema)
+    return await db.scenes.update(scene_id, payload, refresh=True)
 
 
 @scenes.delete("/{scene_id}", status_code=status.HTTP_200_OK)
@@ -190,13 +190,13 @@ async def delete_scene(
 files = APIRouter(prefix="/files", tags=["Files"], dependencies=[AuthRouterDepends])
 
 
-@files.get("", status_code=status.HTTP_200_OK)
+@files.get("/{id}", status_code=status.HTTP_200_OK)
 async def get_file(
     db: DatabaseRepositoriesDepends,
     *,
-    file_id: schemas.FileID,
+    id: schemas.FileID,
 ) -> schemas.FileExtended:
-    return await db.files.get_one(file_id=file_id)
+    return await db.files.get_one(id=id)
 
 
 @files.post("", status_code=status.HTTP_201_CREATED)
@@ -209,7 +209,7 @@ async def create_file(
 ) -> schemas.FileSimplified:
 
     # NOTE: handle multiply requests with the same file from frontend
-    if file := await db.files.get_one_or_none(file_id=payload.file_id):
+    if file := await db.files.get_one_or_none(id=payload.id):
         logger.warning("Duplicate file id: %s. File already exist. ", file.id)
         return file
 

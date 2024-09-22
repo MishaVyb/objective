@@ -56,7 +56,8 @@ def new_line():
 @pytest.fixture(scope="session")
 def settings(request: pytest.FixtureRequest) -> AppSettings:
     common: Any = dict(
-        APP_RAISE_SERVER_EXCEPTIONS=[500, 501, 502, 503, 504],
+        # APP_RAISE_SERVER_EXCEPTIONS=[500, 501, 502, 503, 504],
+        APP_RAISE_SERVER_EXCEPTIONS=True,
     )
 
     if request.config.option.postgres:
@@ -200,10 +201,12 @@ async def setup_users(
     database_context: TDatabaseContext,
     settings: AppSettings,
 ):
+    users = {}
     async with database_context() as db:
         async with UserManagerContext(db, settings) as user_manager:
-            for user in TEST_USERS.values():
-                await user_manager.create(user, request=app_request)
+            for k, user in TEST_USERS.items():
+                users[k] = await user_manager.create(user, request=app_request)
+    return users
 
 
 @pytest.fixture
@@ -226,12 +229,13 @@ async def setup_clients(app: FastAPI, setup_tokens: dict):
         yield {
             1: ObjectiveClient(
                 session,
-                headers={"Authorization": f"Bearer {setup_tokens[2]}"},
+                headers={"Authorization": f"Bearer {setup_tokens[1]}"},
             ),
             2: ObjectiveClient(
                 session,
-                headers={"Authorization": f"Bearer {setup_tokens[1]}"},
+                headers={"Authorization": f"Bearer {setup_tokens[2]}"},
             ),
+            "unauthorized": ObjectiveClient(session),
         }
 
 
