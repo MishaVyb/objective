@@ -12,7 +12,7 @@ from typing import (
 )
 
 from fastapi import Depends, Request
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import Select, exc, select
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.identity import WeakInstanceDict
@@ -27,7 +27,11 @@ from app.exceptions import (
     NotFoundInstanceError,
     RefreshModifiedInstanceError,
 )
-from app.schemas.base import CreateSchemaMixin, UpdateSchemaMixin
+from app.schemas.base import (
+    CreateSchemaMixin,
+    DeclarativeFieldsMixin,
+    UpdateSchemaMixin,
+)
 from common.fastapi.monitoring.base import LoggerDepends
 from common.schemas.base import BaseSchema, DictModel
 
@@ -36,16 +40,18 @@ from .base import AbstractRepository
 if TYPE_CHECKING:
     from app.applications.objective import ObjectiveRequest
     from app.dependencies.users import AuthenticatedUser
-    from app.repository.models import DeclarativeFieldsMixin
+    from app.repository.models import (
+        DeclarativeFieldsMixin as DatabaseDeclarativeFieldsMixin,
+    )
 else:
-    DeclarativeFieldsMixin = object
+    DatabaseDeclarativeFieldsMixin = object
     AuthenticatedUser = object
     ObjectiveRequest = object
 
 logger = logging.getLogger(__name__)
 
-_ModelType = TypeVar("_ModelType", bound=DeclarativeFieldsMixin)
-_SchemaType = TypeVar("_SchemaType", bound=BaseModel)
+_ModelType = TypeVar("_ModelType", bound=DatabaseDeclarativeFieldsMixin)
+_SchemaType = TypeVar("_SchemaType", bound=DeclarativeFieldsMixin)
 _CreateSchemaType = TypeVar("_CreateSchemaType", bound=CreateSchemaMixin)
 _UpdateSchemaType = TypeVar("_UpdateSchemaType", bound=UpdateSchemaMixin)
 _IdentityKeyType = tuple[Type[_ModelType], tuple[Any, ...], Optional[Any]]
@@ -168,14 +174,14 @@ class SQLAlchemyRepository(
             self.session.expire(inst)
 
     async def exist(self, pk: uuid.UUID) -> bool:
-        exists_criteria = select(1).where(self.model.id == pk).exists()
-        result = await self.session.execute(select(exists_criteria))
-        return bool(result.scalar())
+        return await self.exist_where(self.model.id == pk)
 
     async def exist_where(self, *clauses, **filters) -> bool:
-        exists_criteria = (
-            select(self.model).where(*clauses).filter_by(**filters).exists()
-        )
+        # convert filters into clauses, because select(1) does not handle 'filter_by'
+        clauses = list(clauses) + [
+            getattr(self.model, k) == v for k, v in filters.items()
+        ]
+        exists_criteria = select(1).where(*clauses).exists()
         result = await self.session.execute(select(exists_criteria))
         return bool(result.scalar())
 

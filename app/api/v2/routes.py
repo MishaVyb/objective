@@ -107,10 +107,7 @@ async def create_scene(
     *,
     payload: schemas.SceneCreate,
 ) -> schemas.SceneExtended:
-    instance = await db.scenes.create(payload, refresh=True)
-    for f in payload.files:
-        await db.files.create(f)
-    return instance
+    return await db.scenes.create(payload, refresh=True)
 
 
 @scenes.post("/{scene_id}/copy", status_code=status.HTTP_201_CREATED)

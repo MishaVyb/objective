@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from starlette import status
 
 from app.applications.objective import ObjectiveAPP, ObjectiveRequest
+from app.client import ObjectiveClient
 from app.config import AppSettings, AsyncDatabaseDriver
 from app.dependencies.dependencies import SessionContext
 from app.dependencies.users import UserManagerContext
@@ -120,7 +121,7 @@ async def setup_tables(
 
 
 @pytest.fixture
-async def session(app: ObjectiveAPP):
+async def session(setup_tables: None, app: ObjectiveAPP):
     async with app.state.session_maker.begin() as session:
         yield session
 
@@ -206,14 +207,11 @@ async def setup_users(
 
 
 @pytest.fixture
-async def setup_tokens(app: FastAPI):
+async def setup_tokens(setup_users: None, app: FastAPI):
     tokens = {}
-    async with httpx.AsyncClient(
-        app=app,
-        base_url="http://testserver",
-    ) as no_auth_client:
+    async with httpx.AsyncClient(app=app, base_url="http://testserver") as session:
         for k, user in TEST_USERS.items():
-            response = await no_auth_client.post(
+            response = await session.post(
                 "/api/auth/jwt/login",
                 data=dict(username=user.email, password="password"),
             )
@@ -224,18 +222,19 @@ async def setup_tokens(app: FastAPI):
 
 @pytest.fixture
 async def setup_clients(app: FastAPI, setup_tokens: dict):
-    async with AsyncClient(
-        app=app,
-        base_url="http://testserver",
-        headers={"Authorization": f"Bearer {setup_tokens[1]}"},
-    ) as CLIENT_A, AsyncClient(
-        app=app,
-        base_url="http://testserver",
-        headers={"Authorization": f"Bearer {setup_tokens[2]}"},
-    ) as CLIENT_B:
-        yield {1: CLIENT_A, 2: CLIENT_B}
+    async with AsyncClient(app=app, base_url="http://testserver") as session:
+        yield {
+            1: ObjectiveClient(
+                session,
+                headers={"Authorization": f"Bearer {setup_tokens[2]}"},
+            ),
+            2: ObjectiveClient(
+                session,
+                headers={"Authorization": f"Bearer {setup_tokens[1]}"},
+            ),
+        }
 
 
 @pytest.fixture
-def client(clients: dict[int, AsyncClient]) -> AsyncClient:
-    return clients[1]
+def client(setup_clients: dict[int, ObjectiveClient]) -> ObjectiveClient:
+    return setup_clients[1]

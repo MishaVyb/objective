@@ -111,9 +111,8 @@ class FileCreate(FileExtended, CreateSchemaMixin):
 class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     name: str
 
-    # relations
-    files: list[FileSimplified] = []
-    project_id: uuid.UUID  # DEPRECATED self.project should be used
+    # # relations
+    # project_id: uuid.UUID  # DEPRECATED self.project should be used
 
 
 class SceneExtended(SceneSimplified):
@@ -135,15 +134,12 @@ class SceneCreate(SceneExtended, CreateSchemaMixin, exclude={"project"}):
 
     # relations:
     files: list[FileCreate] = []
-    project: ITEM_PG_ID = Field(alias="project_id")
+    project_id: ITEM_PG_ID
 
 
 class SceneUpdate(
     SceneExtended,
     UpdateSchemaMixin,
-    #
-    # Do not need files here as we add new files to scene by POST .../scene/files/
-    exclude={"files"},
     optional=SceneExtended.model_fields,
 ):
     # relations
@@ -193,10 +189,19 @@ class SceneFilters(FiltersBase):
 ########################################################################################
 
 
-class SceneJsonFilePersistence(BaseSchema):  # from .objective JSON files
+# from .objective JSON files
+class FileJsonPersistence(FileCreate, extra="ignore"):
+    pass
+
+
+class SceneJsonFilePersistence(BaseSchema, extra="ignore"):
     type: str | None = None
     version: int | None = None
     source: str | None = None
     elements: list = []
     app_state: dict = Field(default={}, alias="appState")
-    files: dict[FileID, FileCreate]
+    files: dict[FileID, FileJsonPersistence]
+
+    @property
+    def name(self) -> str:
+        return self.app_state.get("name") or "Untitled Scene"

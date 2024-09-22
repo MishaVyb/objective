@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import DeclarativeFieldsMixin
@@ -24,10 +24,10 @@ class Scene(DeclarativeFieldsMixin):
     project: Mapped[Project] = relationship(Project, back_populates="scenes")
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(Project.id), index=True)
 
-    # meta info:
+    # objective scene meta info
     name: Mapped[str]
 
-    # scene data:
+    # excalidraw scene data:
     type: Mapped[str | None]
     version: Mapped[int | None]
     source: Mapped[str | None]  # app url
@@ -35,26 +35,20 @@ class Scene(DeclarativeFieldsMixin):
     elements: Mapped[list] = mapped_column(default=[])
     app_state: Mapped[dict] = mapped_column(default={})
 
-    # relations:
-    files: Mapped[list[File]] = relationship(
-        "File",
-        back_populates="scene",
-        order_by="File.created_at",
-    )
+
+class Element(DeclarativeFieldsMixin):
+    pass
 
 
 class File(DeclarativeFieldsMixin):
 
     # file data
-    file_id: Mapped[str] = mapped_column(index=True)  # excalidraw(!) file id
+    file_id: Mapped[str] = mapped_column(
+        index=True,
+        unique=True,
+    )  # excalidraw(!) file id
     type: Mapped[str]
-    data: Mapped[str]
-
-    # relations:
-    scene_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(Scene.id), index=True)
-    scene: Mapped[Scene] = relationship(Scene, back_populates="files")
-
-    __table_args__ = (UniqueConstraint(scene_id, file_id),)
+    data: Mapped[str]  # VARCHAR ~ Postgres TEXT -- unlimited length (but up to 1gb)
 
 
 # Postponed relations definition

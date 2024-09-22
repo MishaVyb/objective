@@ -40,6 +40,8 @@ _CURRENT_USER: Any = object()
 class RepositoryBase(
     SQLAlchemyRepository[_ModelType, _SchemaType, _CreateSchemaType, _UpdateSchemaType],
 ):
+    db: "DatabaseRepositories"
+
     def _use_filters(
         self, filters: schemas.FiltersBase | None, **extra_filters
     ) -> dict:
@@ -100,14 +102,14 @@ class ProjectRepository(
                 *models.Scene.columns_depending_on(schemas.SceneSimplified),
                 raiseload=True,
             ),
-            #
-            # scene files
-            selectinload(models.Project.scenes)
-            .selectinload(models.Scene.files)
-            .load_only(
-                *models.File.columns_depending_on(schemas.FileSimplified),
-                raiseload=True,
-            ),
+            # #
+            # # scene files
+            # selectinload(models.Project.scenes)
+            # .selectinload(modelsene.files)
+            # .load_only(
+            #     *models.File.columns_depending_on(schemas.FileSimplified),
+            #     raiseload=True,
+            # ),
         ]
 
     # DEPRECATED
@@ -117,26 +119,55 @@ class ProjectRepository(
     @deprecated("")
     async def create_default(self) -> schemas.Project:
         initial = self.app.state.initial_scenes
-        scenes = [
-            models.Scene(
-                name=scene.app_state.get("name") or self.DEFAULT_SCENE_NAME,
-                created_by_id=self.current_user.id,  # ex 'user_id'
-                files=[
-                    models.File(
-                        created_by_id=self.current_user.id,  # ex 'user_id'
-                        **f.model_dump(),
-                    )
-                    for f in scene.files.values()
-                ],
-                **scene.model_dump(exclude={"files"}),
-            )
-            for scene in initial
-        ]
+        # scenes = [
+        #     models.Scene(
+        #         name=scene.app_state.get("name") or self.DEFAULT_SCENE_NAME,
+        #         created_by_id=self.current_user.id,  # ex 'user_id'
+        #         files=[
+        #             models.File(
+        #                 created_by_id=self.current_user.id,  # ex 'user_id'
+        #                 **f.model_dump(),
+        #             )
+        #             for f in scene.files.values()
+        #         ],
+        #         **scene.model_dump(exclude={"files"}),
+        #     )
+        #     for scene in initial
+        # ]
 
         return await self.create(
             schemas.ProjectCreate(name=self.DEFAULT_PROJECT_NAME),
-            scenes=scenes,
+            scenes=[scene for scene in initial],
+            files=[
+                schemas.FileCreate.model_build(file)
+                for scene in initial
+                for file in scene.files.values()
+            ],
         )
+
+    async def create(
+        self,
+        payload: schemas.ProjectCreate,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        refresh: bool = False,
+        *,
+        scenes: list[schemas.SceneCreate | schemas.SceneJsonFilePersistence] = [],
+        files: list[schemas.FileCreate | schemas.FileJsonPersistence] = [],
+        **extra_values,
+    ) -> schemas.Project:
+        project = await super().create(payload, options, refresh, **extra_values)
+
+        for scene in scenes:
+            await self.db.scenes.create(
+                schemas.SceneCreate.model_build(
+                    scene,
+                    name=scene.name,
+                    project_id=project.id,
+                    files=files,
+                ),
+            )
+
+        return project
 
 
 class SceneRepository(
@@ -153,13 +184,34 @@ class SceneRepository(
     class Loading(RepositoryBase.Loading):
         default = [
             joinedload(models.Scene.project),
-            #
-            # files simplified
-            selectinload(models.Scene.files).load_only(
-                *models.File.columns_depending_on(schemas.FileSimplified),
-                raiseload=True,
-            ),
+            # #
+            # # files simplified
+            # selectinload(models.Scene.files).load_only(
+            #     *models.File.columns_depending_on(schemas.FileSimplified),
+            #     raiseload=True,
+            # ),
         ]
+
+    async def create(
+        self,
+        payload: schemas.SceneCreate,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        refresh: bool = False,
+        # *,
+        # project_id: uuid.UUID,
+        **extra_values,
+    ) -> schemas.SceneExtended:
+        scene = await super().create(
+            payload,
+            options,
+            refresh,
+            # project_id=project_id,
+            **extra_values,
+        )
+        for file in payload.files:
+            if not await self.db.files.exist_where(file_id=file.file_id):
+                await self.db.files.create(file)
+        return scene  # do not refresh instance as Scene has not target relationship with Files
 
 
 class FileRepository(
@@ -192,6 +244,10 @@ class DatabaseRepositories:
 
     users: Annotated[UserRepository, Depends()]
 
+    def __post_init__(self) -> None:
+        for repo in self.repositories:
+            repo.db = self
+
     @classmethod
     def construct(
         cls,
@@ -222,7 +278,7 @@ class DatabaseRepositories:
         )
 
     @property
-    def repositories(self) -> list[SQLAlchemyRepository]:
+    def repositories(self) -> list[RepositoryBase]:
         return [getattr(self, field.name) for field in fields(self)]
 
 
