@@ -19,8 +19,13 @@ class DeclarativeFieldsMixin(ModelConstructor):
 
 class CreateSchemaMixin(
     DeclarativeFieldsMixin,
-    # NOTE
-    # it allows CREATE instances with ID (for Files / Elements)
+    exclude=DeclarativeFieldsMixin.model_fields,
+):
+    pass
+
+
+class CreateWithIDSchemaMixin(
+    DeclarativeFieldsMixin,
     exclude=set(DeclarativeFieldsMixin.model_fields) - {"id"},
 ):
     pass

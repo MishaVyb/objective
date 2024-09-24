@@ -23,7 +23,7 @@ from app.dependencies.users import UserManagerContext
 from app.main import setup
 from app.repository.models import Base
 from app.repository.repositories import DatabaseRepositories
-from app.schemas import deprecated_schemas
+from app.schemas import schemas
 from tests.helpers import (
     create_and_drop_tables_by_alembic,
     create_and_drop_tables_by_metadata,
@@ -176,22 +176,20 @@ async def database_context(
 # Users / Clients
 ########################################################################################
 
-USER_A = deprecated_schemas.UserCreate(
-    email="user_a@test.com",
-    password="password",
-    username="user_a",
-    role="string",
-)
-USER_B = deprecated_schemas.UserCreate(
-    email="user_b@test.com",
-    password="password",
-    username="user_b",
-    role="string",
-)
 
 TEST_USERS = {
-    1: USER_A,
-    2: USER_B,
+    1: schemas.UserCreate(
+        email="user_a@test.com",
+        password="password",
+        username="user_a",
+        role="string",
+    ),
+    2: schemas.UserCreate(
+        email="user_b@test.com",
+        password="password",
+        username="user_b",
+        role="string",
+    ),
 }
 
 
@@ -201,7 +199,7 @@ async def setup_users(
     database_context: TDatabaseContext,
     settings: AppSettings,
 ):
-    users = {}
+    users: dict[int, schemas.User] = {}
     async with database_context() as db:
         async with UserManagerContext(db, settings) as user_manager:
             for k, user in TEST_USERS.items():
@@ -210,7 +208,7 @@ async def setup_users(
 
 
 @pytest.fixture
-async def setup_tokens(setup_users: None, app: FastAPI):
+async def setup_tokens(setup_users: dict[int, schemas.User], app: FastAPI):
     tokens = {}
     async with httpx.AsyncClient(app=app, base_url="http://testserver") as session:
         for k, user in TEST_USERS.items():
@@ -242,3 +240,28 @@ async def setup_clients(app: FastAPI, setup_tokens: dict):
 @pytest.fixture
 def client(setup_clients: dict[int, ObjectiveClient]) -> ObjectiveClient:
     return setup_clients[1]
+
+
+########################################################################################
+# data
+########################################################################################
+
+
+@pytest.fixture
+def USER_A(setup_users: dict[int, schemas.User]):
+    return setup_users[1]
+
+
+@pytest.fixture
+def USER_B(setup_users: dict[int, schemas.User]):
+    return setup_users[2]
+
+
+@pytest.fixture
+def CLIENT_A(setup_clients: dict[int, ObjectiveClient]):
+    return setup_clients[1]
+
+
+@pytest.fixture
+def CLIENT_B(setup_clients: dict[int, ObjectiveClient]):
+    return setup_clients[2]

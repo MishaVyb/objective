@@ -30,8 +30,10 @@ _DEFAULT_SCENES_AMOUNT = 2
 TEST_PROJECT = schemas.ProjectCreate(name="test-project")
 
 
-async def test_default_project(app: ObjectiveAPP, client: ObjectiveClient) -> None:
-    file_ids = [file for scene in app.state.initial_scenes for file in scene.files]
+async def test_default_project_and_scenes(
+    app: ObjectiveAPP,
+    client: ObjectiveClient,
+) -> None:
 
     # check project
     result = await client.get_projects()
@@ -47,6 +49,7 @@ async def test_default_project(app: ObjectiveAPP, client: ObjectiveClient) -> No
     assert result.items == IsList(length=_DEFAULT_SCENES_AMOUNT)
 
     # check files
+    file_ids = [file for scene in app.state.initial_scenes for file in scene.files]
     for file_id in file_ids:
         res = await client.get_file(file_id)
         assert res.data

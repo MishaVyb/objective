@@ -10,6 +10,7 @@ from common.schemas.base import ITEM_PG_ID, BaseSchema
 
 from .base import (
     CreateSchemaMixin,
+    CreateWithIDSchemaMixin,
     DeclarativeFieldsMixin,
     ItemsResponseBase,
     UpdateSchemaMixin,
@@ -71,36 +72,12 @@ class GetProjectsResponse(ItemsResponseBase[Project]):
 
 
 ########################################################################################
-# files
-########################################################################################
-
-FileID = Annotated[str, ...]
-"""File id length equals 40 to align with the HEX length of SHA-1 (which is 160 bit). """
-
-
-class FileSimplified(BaseSchema, DeclarativeFieldsMixin):
-    id: FileID
-    type: str = Field(alias="mimeType")
-
-
-class FileExtended(FileSimplified):
-    data: str = Field(alias="dataURL")
-
-
-class FileCreate(FileExtended, CreateSchemaMixin):
-    pass
-
-
-########################################################################################
 # scenes
 ########################################################################################
 
 
 class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     name: str
-
-    # # relations
-    # project_id: uuid.UUID  # DEPRECATED self.project should be used
 
 
 class SceneExtended(SceneSimplified):
@@ -183,7 +160,28 @@ class GetElementsResponse(ItemsResponseBase[Element]):
 
 
 ########################################################################################
-# Filters
+# files
+########################################################################################
+
+FileID = Annotated[str, ...]
+"""File id length equals 40 to align with the HEX length of SHA-1 (which is 160 bit). """
+
+
+class FileSimplified(BaseSchema, DeclarativeFieldsMixin):
+    id: FileID
+    type: str = Field(alias="mimeType")
+
+
+class FileExtended(FileSimplified):
+    data: str = Field(alias="dataURL")
+
+
+class FileCreate(FileExtended, CreateWithIDSchemaMixin):
+    pass
+
+
+########################################################################################
+# filters
 ########################################################################################
 
 

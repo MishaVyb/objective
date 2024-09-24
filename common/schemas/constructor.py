@@ -313,7 +313,11 @@ class ModelConstructor(BaseModel):
         any validation. If nested field passed as dictionary, it won't be transformed
         into a nested model object, that breaks down the whole schema transformation logic.
         """
-        extra_values = {k: v for k, v in extra_values.items() if k in cls.model_fields}
+        aliases = {
+            field.alias or field.validation_alias for field in cls.model_fields.values()
+        }
+        fields = aliases | set(cls.model_fields)
+        extra_values = {k: v for k, v in extra_values.items() if k in fields}
         if not payload:
             if not extra_values:
                 return None  # type: ignore

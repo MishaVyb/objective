@@ -29,6 +29,7 @@ from app.exceptions import (
 )
 from app.schemas.base import (
     CreateSchemaMixin,
+    CreateWithIDSchemaMixin,
     DeclarativeFieldsMixin,
     UpdateSchemaMixin,
 )
@@ -52,7 +53,10 @@ logger = logging.getLogger(__name__)
 
 _ModelType = TypeVar("_ModelType", bound=DatabaseDeclarativeFieldsMixin)
 _SchemaType = TypeVar("_SchemaType", bound=DeclarativeFieldsMixin)
-_CreateSchemaType = TypeVar("_CreateSchemaType", bound=CreateSchemaMixin)
+_CreateSchemaType = TypeVar(
+    "_CreateSchemaType",
+    bound=CreateSchemaMixin | CreateWithIDSchemaMixin,
+)
 _UpdateSchemaType = TypeVar("_UpdateSchemaType", bound=UpdateSchemaMixin)
 _IdentityKeyType = tuple[Type[_ModelType], tuple[Any, ...], Optional[Any]]
 

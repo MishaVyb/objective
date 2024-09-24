@@ -153,11 +153,14 @@ async def copy_scene(
     ...
 
     # handle scene
-    data = original.model_dump() | payload.model_dump(exclude_unset=True)
-    instance = await db.scenes.create(
-        schemas.SceneCreate.model_build(**data),
-        refresh=True,
+    p = schemas.SceneCreate.model_build(
+        **(
+            original.model_dump()
+            | payload.model_dump(exclude_unset=True, exclude={"project_id"})
+        ),
+        project_id=payload.project_id or original.project.id,
     )
+    instance = await db.scenes.create(p, refresh=True)
 
     return instance
 

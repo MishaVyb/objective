@@ -16,7 +16,6 @@ from sqlalchemy.orm import (
     relationship,
 )
 from sqlalchemy.orm.exc import DetachedInstanceError
-from typing_extensions import deprecated
 
 from app.config import AppSettings
 from common.schemas.base import BaseSchema
@@ -70,7 +69,6 @@ class Base(DeclarativeBase):
         datetime: _DateTimeForceTimezone(),
         dict: JSON,
         list: JSON,
-        # uuid.UUID: GUID, # ???
     }
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -101,33 +99,11 @@ class Base(DeclarativeBase):
             if fieldname in columns
         ]
 
-    # UNUSED
-    @deprecated("")
-    def to_dict(self, *, exclude: set[str] = None, include: set[str] = None):
-        """Return column names to values mapping. NOTE: relationships are not included, **only columns**."""
-
-        if exclude and include:
-            raise ValueError("Mutually exclusive options. ")
-
-        fields = {c.name for c in self.__table__.columns}
-        include = include or fields
-        exclude = exclude or set()
-
-        if exclude - fields:
-            raise ValueError(exclude - fields)
-        if include - fields:
-            raise ValueError(include - fields)
-
-        return {
-            c: getattr(self, c) for c in fields if c in include and c not in exclude
-        }
-
 
 class DeclarativeFieldsMixin(Base):
     __abstract__ = True
 
     id: Mapped[uuid.UUID] = mapped_column(
-        # GUID, # ???
         primary_key=True,
         default=lambda: uuid.uuid4(),
     )

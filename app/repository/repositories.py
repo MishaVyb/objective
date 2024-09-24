@@ -34,9 +34,8 @@ else:
 _CURRENT_USER: Any = object()
 
 
-# NOTE: Specific for Objective service only (not common)
-# TODO move to service
-class RepositoryBase(
+# NOTE: Specific logic for Objective only (not common)
+class ServiceRepositoryBase(
     SQLAlchemyRepository[_ModelType, _SchemaType, _CreateSchemaType, _UpdateSchemaType],
 ):
     db: "DatabaseRepositories"
@@ -45,13 +44,15 @@ class RepositoryBase(
         self,
         filters: schemas.FiltersBase | None,
         *,
-        is_deleted: bool = False,  # UNUSED using is_deleted flag from request Query
+        is_deleted: bool = False,
         **extra_filters,
     ) -> dict:
+        if is_deleted:
+            raise NotImplementedError  # using is_deleted flag from request Query
+
         if filters:
 
             # default filters:
-
             if "created_by_id" not in filters.model_fields_set:
                 filters.created_by_id = self.current_user.id
 
@@ -63,6 +64,17 @@ class RepositoryBase(
 
         return super()._use_filters(filters, **extra_filters)
 
+    async def create(
+        self,
+        payload: _CreateSchemaType,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        refresh: bool = False,
+        **extra_values,
+    ) -> _SchemaType:
+        instance = await super().create(payload, options, refresh, **extra_values)
+        await self.check_create_rights(instance)
+        return instance
+
     async def update(
         self,
         pk: UUID,
@@ -72,13 +84,26 @@ class RepositoryBase(
         refresh: bool = False,
         **extra_values,
     ) -> _SchemaType:
+        instance = await super().update(
+            pk, payload, options, flush, refresh, **extra_values
+        )
+        await self.check_update_rights(instance)
+        return instance
 
-        # check rights
-        res = await super().update(pk, payload, options, flush, refresh, **extra_values)
-        if self.current_user.id != res.created_by_id:
-            raise NotEnoughRights(f"Not enough rights to update: {res}")
+    # TMP solution
+    async def check_read_rights(self, instance: _SchemaType):
+        pass
 
-        return res
+    async def check_create_rights(self, instance: _SchemaType):
+        pass
+
+    async def check_update_rights(self, instance: _SchemaType):
+        if self.current_user.id != instance.created_by_id:
+            raise NotEnoughRights(f"Not enough rights to update: {instance}")
+
+    # UNUSED METHODS
+    async def pending_create(self, payload: _CreateSchemaType, **extra_values) -> None:
+        raise NotImplementedError
 
     async def pending_update(
         self, pk: UUID, payload: _UpdateSchemaType | None = None, **extra_values
@@ -87,7 +112,7 @@ class RepositoryBase(
 
 
 class ProjectRepository(
-    RepositoryBase[
+    ServiceRepositoryBase[
         models.Project,
         schemas.Project,
         schemas.ProjectCreate,
@@ -97,22 +122,12 @@ class ProjectRepository(
     model = models.Project
     schema = schemas.Project
 
-    class Loading(RepositoryBase.Loading):
+    class Loading(ServiceRepositoryBase.Loading):
         default = [
-            #
-            # scenes
             selectinload(models.Project.scenes).load_only(
                 *models.Scene.columns_depending_on(schemas.SceneSimplified),
                 raiseload=True,
             ),
-            # #
-            # # scene files
-            # selectinload(models.Project.scenes)
-            # .selectinload(modelsene.files)
-            # .load_only(
-            #     *models.File.columns_depending_on(schemas.FileSimplified),
-            #     raiseload=True,
-            # ),
         ]
 
     # DEPRECATED
@@ -122,22 +137,6 @@ class ProjectRepository(
     @deprecated("")
     async def create_default(self) -> schemas.Project:
         initial = self.app.state.initial_scenes
-        # scenes = [
-        #     models.Scene(
-        #         name=scene.app_state.get("name") or self.DEFAULT_SCENE_NAME,
-        #         created_by_id=self.current_user.id,  # ex 'user_id'
-        #         files=[
-        #             models.File(
-        #                 created_by_id=self.current_user.id,  # ex 'user_id'
-        #                 **f.model_dump(),
-        #             )
-        #             for f in scene.files.values()
-        #         ],
-        #         **scene.model_dump(exclude={"files"}),
-        #     )
-        #     for scene in initial
-        # ]
-
         return await self.create(
             schemas.ProjectCreate(name=self.DEFAULT_PROJECT_NAME),
             scenes=[scene for scene in initial],
@@ -174,7 +173,7 @@ class ProjectRepository(
 
 
 class SceneRepository(
-    RepositoryBase[
+    ServiceRepositoryBase[
         models.Scene,
         schemas.SceneExtended,
         schemas.SceneCreate,
@@ -184,15 +183,9 @@ class SceneRepository(
     model = models.Scene
     schema = schemas.SceneExtended
 
-    class Loading(RepositoryBase.Loading):
+    class Loading(ServiceRepositoryBase.Loading):
         default = [
             joinedload(models.Scene.project),
-            # #
-            # # files simplified
-            # selectinload(models.Scene.files).load_only(
-            #     *models.File.columns_depending_on(schemas.FileSimplified),
-            #     raiseload=True,
-            # ),
         ]
 
     async def create(
@@ -213,9 +206,14 @@ class SceneRepository(
                 await self.db.files.create(file)
         return scene  # do not refresh instance as Scene has not target relationship with Files
 
+    # TMP easy solution
+    async def check_create_rights(self, instance: schemas.SceneExtended):
+        if self.current_user.id != instance.project.created_by_id:
+            raise NotEnoughRights(f"Not enough rights to update: {instance.project}")
+
 
 class FileRepository(
-    RepositoryBase[
+    ServiceRepositoryBase[
         models.File,
         schemas.FileExtended,
         schemas.FileCreate,
@@ -275,7 +273,7 @@ class DatabaseRepositories:
         )
 
     @property
-    def repositories(self) -> list[RepositoryBase]:
+    def repositories(self) -> list[ServiceRepositoryBase]:
         return [getattr(self, field.name) for field in fields(self)]
 
 

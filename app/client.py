@@ -99,6 +99,18 @@ class ObjectiveClient(HTTPXClientBase):
             response_schema=schemas.SceneExtended,
         )
 
+    async def copy_scene(
+        self,
+        id: UUID,
+        payload: schemas.SceneUpdate,
+    ) -> schemas.SceneExtended:
+        return await self._call_service(
+            HTTPMethod.POST,
+            f"/scenes/{id}/copy",
+            payload=payload,
+            response_schema=schemas.SceneExtended,
+        )
+
     async def update_scene(
         self,
         id: UUID,

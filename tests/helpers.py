@@ -125,6 +125,9 @@ class parametrize:
 
 
 class AssertionDifferenceMixin:
+    _LIST_LEN_THRESHOLD = 3  # trim nested lists/dicts
+    _DICT_LEN_THRESHOLD = 10
+
     def get_operands(self, result: Any):
         ...
 
@@ -137,7 +140,35 @@ class AssertionDifferenceMixin:
         left, right = self.get_operands(result)
         return self._get_diff_lines(left, right)
 
+    def _trim_result_representation(self, result: Any):
+        if isinstance(result, dict):
+            for k in result:
+                if isinstance(result[k], list):
+                    # trim nested list
+                    if len(result[k]) > self._LIST_LEN_THRESHOLD:
+                        result[k] = result[k][: self._LIST_LEN_THRESHOLD]
+                        result[k] += ["<trimmed>"]
+
+                    # trim nested list dict items
+                    for item in result[k]:
+                        if isinstance(item, dict):
+                            for _ in range(self._DICT_LEN_THRESHOLD, len(item)):
+                                item.popitem()
+                            if self._DICT_LEN_THRESHOLD < len(item):
+                                item |= {"<trimmed>": "<trimmed>"}
+
+                # trim nested dict
+                if isinstance(result[k], dict):
+                    item = result[k]
+                    for _ in range(self._DICT_LEN_THRESHOLD, len(item)):
+                        item.popitem()
+                    if self._DICT_LEN_THRESHOLD < len(item):
+                        item |= {"<trimmed>": "<trimmed>"}
+
+        return result
+
     def _get_diff_lines(self, expected: Any, result: Any):
+        result = self._trim_result_representation(result)
         expected_lines = pformat(expected).split("\n")
         result_lines = pformat(result).split("\n")
         diff = difflib.ndiff(expected_lines, result_lines)
@@ -158,6 +189,18 @@ class AssertionDifferenceMixin:
 
 
 class IsPartialSchema(dirty_equals.IsPartialDict, AssertionDifferenceMixin):
+    def __init__(
+        self, expected: dict[Any, Any] | BaseModel | None = None, **expected_kwargs: Any
+    ):
+        if isinstance(expected, BaseModel):
+            expected = expected.model_dump(exclude_unset=True)
+        if expected and expected_kwargs:
+            super().__init__(**expected, **expected_kwargs)  # merge expected kwargs
+        elif expected:
+            super().__init__(expected)
+        else:
+            super().__init__(**expected_kwargs)
+
     def equals(self, other: dict | BaseModel) -> bool:
         data = self.use_result(other)
         return super().equals(data)
