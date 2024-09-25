@@ -1,10 +1,12 @@
 import logging
+import uuid
 
 import pytest
 from dirty_equals import IsDict, IsStr
+from fastapi import HTTPException, status
 
-from app.applications.objective import ObjectiveAPP
 from app.client import ObjectiveClient
+from app.exceptions import NotFoundInstanceError
 from app.schemas import schemas
 from common.fastapi.exceptions.exceptions import NotEnoughRights
 from tests.helpers import IsList, IsPartialSchema
@@ -174,14 +176,91 @@ async def test_scene_copy(client: ObjectiveClient, CLIENT_B: ObjectiveClient) ->
         )
 
 
-# TODO
-# test create file twice - ok
-# test deleted scene included in project.scenes = [...] always, fronted is responsible to filter that
-# test filters
+async def test_files_crud(client: ObjectiveClient) -> None:
+    # NOTE
+    # - files could be created via Scene create/copy, that tested above
+    # - and files could be created directly
+
+    payload = schemas.FileCreate(id="file_1", data="data_1", type="image/png")
+    assert await client.create_file(payload) == IsPartialSchema(id="file_1")
+    assert await client.get_file("file_1") == IsPartialSchema(payload)
+
+    # create the same file twice -- ok
+    assert await client.create_file(payload) == IsPartialSchema(id="file_1")
 
 
-async def test_scene_filters(app: ObjectiveAPP, client: ObjectiveClient) -> None:
-    ...
+async def test_scene_filters_is_deleted(client: ObjectiveClient) -> None:
+    # arrange:
+    PROJECT = (await client.get_projects()).items[0]
+    await client.delete_scene(PROJECT.scenes[0].id)
+
+    # act:
+    results = await client.get_scenes()
+    assert results.items == [
+        IsPartialSchema(is_deleted=True),
+        IsPartialSchema(is_deleted=False),
+    ]
+    results = await client.get_scenes(schemas.SceneFilters(is_deleted=False))
+    assert results.items == [
+        # IsPartialSchema(is_deleted=True),
+        IsPartialSchema(is_deleted=False),
+    ]
+    results = await client.get_scenes(schemas.SceneFilters(is_deleted=True))
+    assert results.items == [
+        IsPartialSchema(is_deleted=True),
+        # IsPartialSchema(is_deleted=False),
+    ]
+
+    # project has always both DELETED and NOT DELETED scenes
+    result = await client.get_project(PROJECT.id)
+    assert result.scenes == [
+        IsPartialSchema(is_deleted=True),
+        IsPartialSchema(is_deleted=False),
+    ]
+    result = (
+        await client.get_projects(schemas.ProjectFilters(is_deleted=False))
+    ).items[0]
+    assert result.scenes == [
+        IsPartialSchema(is_deleted=True),
+        IsPartialSchema(is_deleted=False),
+    ]
+
+
+async def test_scene_filters_project_id(
+    client: ObjectiveClient,
+    *,
+    USER_A: schemas.User,
+    CLIENT_A: ObjectiveClient,
+    USER_B: schemas.User,
+    CLIENT_B: ObjectiveClient,
+) -> None:
+    PROJECT_A = (await CLIENT_A.get_projects()).items[0]
+    PROJECT_B = (await CLIENT_B.get_projects()).items[0]
+
+    results = await CLIENT_A.get_scenes(schemas.SceneFilters(created_by_id=USER_B.id))
+    assert results.items == [
+        IsPartialSchema(created_by_id=USER_B.id),
+        IsPartialSchema(created_by_id=USER_B.id),
+    ]
+    results = await CLIENT_A.get_scenes(schemas.SceneFilters(created_by_id=""))
+    assert results.items == [
+        IsPartialSchema(created_by_id=USER_A.id),
+        IsPartialSchema(created_by_id=USER_A.id),
+        IsPartialSchema(created_by_id=USER_B.id),
+        IsPartialSchema(created_by_id=USER_B.id),
+    ]
+
+    # per project
+    results = await CLIENT_A.get_scenes(
+        schemas.SceneFilters(created_by_id="", project_id=PROJECT_B.id),
+    )
+    assert results.items == [
+        IsPartialSchema(created_by_id=USER_B.id),
+        IsPartialSchema(created_by_id=USER_B.id),
+    ]
+    # per project, created by current_user by default
+    results = await CLIENT_A.get_scenes(schemas.SceneFilters(project_id=PROJECT_B.id))
+    assert results.items == []  # no results
 
 
 async def test_scene_access_rights(
@@ -215,5 +294,12 @@ async def test_scene_access_rights(
         await CLIENT_A.copy_scene(PROJECT_A.scenes[0].id, payload)
 
 
-async def test_scene_401_404(app: ObjectiveAPP, client: ObjectiveClient) -> None:
-    ...
+async def test_scene_401(setup_clients: dict[str | int, ObjectiveClient]):
+    with pytest.raises(HTTPException) as exc:
+        await setup_clients["unauthorized"].get_scene(uuid.uuid4())
+    assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+async def test_scene_404(client: ObjectiveClient):
+    with pytest.raises(NotFoundInstanceError):
+        await client.get_project(uuid.uuid4())

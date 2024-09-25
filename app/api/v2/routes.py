@@ -207,13 +207,12 @@ async def create_file(
     db: DatabaseRepositoriesDepends,
     logger: LoggerDepends,
     *,
-    scene_id: UUID,
     payload: schemas.FileCreate,
 ) -> schemas.FileSimplified:
 
-    # NOTE: handle multiply requests with the same file from frontend
+    # suppress error for multiply requests with the same file from frontend
     if file := await db.files.get_one_or_none(id=payload.id):
         logger.warning("Duplicate file id: %s. File already exist. ", file.id)
         return file
 
-    return await db.files.create(payload, scene_id=scene_id)
+    return await db.files.create(payload)

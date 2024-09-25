@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, Literal, TypeVar
 
 import yarl
 from fastapi.encoders import jsonable_encoder
@@ -87,6 +87,9 @@ DatetimeUTCOptionalAdapter: TypeAdapter[DatetimeUTC | None] = TypeAdapter(
 
 _T = TypeVar("_T")
 JsonSerializable = Annotated[_T, PlainSerializer(lambda v: jsonable_encoder(v))]
+
+NullValue = Literal[""]
+"""None value compatible with FastAPI Query params. """
 
 
 class _YarlURLPydanticSchema:

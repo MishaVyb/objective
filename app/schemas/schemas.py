@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 import fastapi_users
 from pydantic import Field
 
-from common.schemas.base import ITEM_PG_ID, BaseSchema
+from common.schemas.base import ITEM_PG_ID, BaseSchema, NullValue
 
 from .base import (
     CreateSchemaMixin,
@@ -177,7 +177,7 @@ class FileExtended(FileSimplified):
 
 
 class FileCreate(FileExtended, CreateWithIDSchemaMixin):
-    pass
+    id: FileID
 
 
 ########################################################################################
@@ -186,9 +186,8 @@ class FileCreate(FileExtended, CreateWithIDSchemaMixin):
 
 
 class FiltersBase(BaseSchema):
-    created_by_id: uuid.UUID | Literal["current_user"] | Literal[""] = Field(
+    created_by_id: uuid.UUID | Literal["current_user"] | NullValue = Field(
         default="current_user",
-        alias="user_id",
     )
     is_deleted: bool | None = None
 
