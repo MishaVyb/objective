@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass, fields
 from logging import Logger
 from typing import TYPE_CHECKING, Annotated, Any, Never, Self, Sequence
@@ -90,6 +91,18 @@ class ServiceRepositoryBase(
         await self.check_update_rights(instance)
         return instance
 
+    async def pending_create(self, payload: _CreateSchemaType, **extra_values) -> None:
+        instance = await super().pending_create(payload, **extra_values)
+        await self.check_create_rights(instance)
+        return instance
+
+    async def pending_update(
+        self, pk: UUID, payload: _UpdateSchemaType | None = None, **extra_values
+    ) -> None:
+        instance = await super().pending_update(pk, payload, **extra_values)
+        await self.check_create_rights(instance)
+        return instance
+
     # TMP solution
     async def check_read_rights(self, instance: _SchemaType):
         pass
@@ -100,15 +113,6 @@ class ServiceRepositoryBase(
     async def check_update_rights(self, instance: _SchemaType):
         if self.current_user.id != instance.created_by_id:
             raise NotEnoughRights(f"Not enough rights to update: {instance}")
-
-    # UNUSED METHODS
-    async def pending_create(self, payload: _CreateSchemaType, **extra_values) -> None:
-        raise NotImplementedError
-
-    async def pending_update(
-        self, pk: UUID, payload: _UpdateSchemaType | None = None, **extra_values
-    ) -> None:
-        raise NotImplementedError
 
 
 class ProjectRepository(
@@ -124,10 +128,7 @@ class ProjectRepository(
 
     class Loading(ServiceRepositoryBase.Loading):
         default = [
-            selectinload(models.Project.scenes).load_only(
-                *models.Scene.columns_depending_on(schemas.SceneSimplified),
-                raiseload=True,
-            ),
+            selectinload(models.Project.scenes),
         ]
 
     # DEPRECATED
@@ -175,17 +176,18 @@ class ProjectRepository(
 class SceneRepository(
     ServiceRepositoryBase[
         models.Scene,
-        schemas.SceneExtended,
+        schemas.SceneExtendedInternal,
         schemas.SceneCreate,
         schemas.SceneUpdate,
     ],
 ):
     model = models.Scene
-    schema = schemas.SceneExtended
+    schema = schemas.SceneExtendedInternal
 
     class Loading(ServiceRepositoryBase.Loading):
         default = [
             joinedload(models.Scene.project),
+            selectinload(models.Scene.elements),
         ]
 
     async def create(
@@ -194,7 +196,7 @@ class SceneRepository(
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         refresh: bool = False,
         **extra_values,
-    ) -> schemas.SceneExtended:
+    ) -> schemas.SceneExtendedInternal:
         scene = await super().create(
             payload,
             options,
@@ -204,12 +206,84 @@ class SceneRepository(
         for file in payload.files:
             if not await self.db.files.exist_where(id=file.id):
                 await self.db.files.create(file)
-        return scene  # do not refresh instance as Scene has not target relationship with Files
+
+        for el in payload.elements or []:
+            await self.db.elements.pending_create(el, scene_id=scene.id)
+
+        await self.db.all.flush()
+        return await self.get(scene.id, refresh=True)
 
     # TMP easy solution
     async def check_create_rights(self, instance: schemas.SceneExtended):
         if self.current_user.id != instance.project.created_by_id:
             raise NotEnoughRights(f"Not enough rights to update: {instance.project}")
+
+
+class ElementRepository(
+    ServiceRepositoryBase[
+        models.Element,
+        schemas.ElementInternal,  # get
+        schemas.Element,  # create
+        schemas.Element,  # update
+    ],
+):
+    model = models.Element
+    schema = schemas.ElementInternal
+
+    def _use_payload(self, payload: schemas.Element | None, **extra_values) -> dict:
+        data = super()._use_payload(payload, **extra_values)
+        if payload:
+            data["json"] = payload.model_dump(exclude_unset=True)
+        return data
+
+    async def sync(
+        self,
+        scene_id: uuid.UUID,
+        payload: schemas.SyncElementsRequest,
+        filters: schemas.ElementsFilters,
+    ):
+        payload_els = {el.id: el for el in payload.items}
+
+        items = await self.db.elements.get_where(
+            clauses=[self.model.scene_id == scene_id, self.model.id.in_(payload_els)],
+        )
+        current_els = {el.id: el for el in items}
+        new_els = {el.id: el for el in payload_els.values() if el.id not in current_els}
+
+        # reconcile existing
+
+        for id in current_els:
+            payload_el = payload_els[id]
+            current_el = current_els[id]
+
+            if payload_el.version > current_el.version:
+                await self.pending_update(payload_el.id, payload_el)
+
+            else:
+                if payload_el.version_nonce == current_el.version_nonce:
+                    # the same client request sync for the same element twice (or more)
+                    # assuming elements are fully equal
+                    continue
+
+                # 2 clients have made update for the same element
+                # - one client update has been stored already
+                # - another client change just has come
+
+                # figure out who made last update on client side
+                if payload_el.updated < current_el.updated:
+                    continue
+
+                await self.pending_update(payload_el.id, payload_el)
+
+        # append new
+        for el in new_els.values():
+            await self.pending_create(el, scene_id=scene_id)
+
+        if filters.sync_token:
+            return ...
+
+        # inappropriate usage...
+        return await self.db.elements.get_where(scene_id=scene_id)
 
 
 class FileRepository(
@@ -223,11 +297,6 @@ class FileRepository(
     model = models.File
     schema = schemas.FileExtended
 
-    async def get(
-        self, pk: UUID, *, options: Sequence[ORMOption] = ..., refresh: bool = False
-    ) -> schemas.FileExtended:
-        raise NotImplementedError  # use get_one by id instead
-
 
 @dataclass(kw_only=True)
 class DatabaseRepositories:
@@ -235,6 +304,7 @@ class DatabaseRepositories:
 
     projects: Annotated[ProjectRepository, Depends()]
     scenes: Annotated[SceneRepository, Depends()]
+    elements: Annotated[ElementRepository, Depends()]
     files: Annotated[FileRepository, Depends()]
 
     users: Annotated[UserRepository, Depends()]

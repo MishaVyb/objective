@@ -25,6 +25,7 @@ class BaseSchema(ModelConstructor):
         from_attributes=True,
         extra="forbid",
         populate_by_name=True,
+        use_attribute_docstrings=True,
     )
 
     def __str__(self) -> str:

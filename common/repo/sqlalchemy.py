@@ -13,7 +13,7 @@ from typing import (
 
 from fastapi import Depends, Request
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import Select, exc, select
+from sqlalchemy import ColumnExpressionArgument, Select, exc, select
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.identity import WeakInstanceDict
 from sqlalchemy.orm.interfaces import ORMOption
@@ -55,7 +55,7 @@ _ModelType = TypeVar("_ModelType", bound=DatabaseDeclarativeFieldsMixin)
 _SchemaType = TypeVar("_SchemaType", bound=DeclarativeFieldsMixin)
 _CreateSchemaType = TypeVar(
     "_CreateSchemaType",
-    bound=CreateSchemaMixin | CreateWithIDSchemaMixin,
+    bound=CreateSchemaMixin | CreateWithIDSchemaMixin | BaseSchema,
 )
 _UpdateSchemaType = TypeVar("_UpdateSchemaType", bound=UpdateSchemaMixin)
 _IdentityKeyType = tuple[Type[_ModelType], tuple[Any, ...], Optional[Any]]
@@ -314,13 +314,16 @@ class SQLAlchemyRepository(
 
     async def get_where(
         self,
+        *,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         is_deleted: bool = False,
+        clauses: list[ColumnExpressionArgument] = (),
         **filters,
     ) -> list[_SchemaType]:
         stm = self._use_statement_get_instances_list(
             options=options,
             is_deleted=is_deleted,
+            clauses=clauses,
             **filters,
         )
         items = await self._get_instances_list(stm)
@@ -332,12 +335,14 @@ class SQLAlchemyRepository(
         *,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         is_deleted: bool = False,
+        clauses: list[ColumnExpressionArgument] = (),
         **extra_filters,
     ) -> list[_SchemaType]:
         stm = self._use_statement_get_instances_list(
             filters=filters,
             options=options,
             is_deleted=is_deleted,
+            clauses=clauses,
             **extra_filters,
         )
         items = await self._get_instances_list(stm)
@@ -348,6 +353,7 @@ class SQLAlchemyRepository(
         filters: BaseSchema | None = None,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         is_deleted: bool = False,
+        clauses: list[ColumnExpressionArgument] = (),
         **extra_filters,
     ) -> Select:
         filters = self._use_filters(filters, is_deleted=is_deleted, **extra_filters)
@@ -356,6 +362,7 @@ class SQLAlchemyRepository(
         self.logger.debug("[DATABASE] Querying %r %s. ", self, filters)
         stm = (
             select(self.model)
+            .where(*clauses)
             .filter_by(**filters)
             .options(*options)
             .order_by(self.model.created_at)  # VBRN

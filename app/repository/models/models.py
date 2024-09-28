@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, PrimaryKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.schemas.schemas import FileID
+from app.schemas.schemas import ElementID, FileID
 
 from .base import DeclarativeFieldsMixin
 from .users import User
@@ -16,7 +16,6 @@ class Project(DeclarativeFieldsMixin):
 
     # relations:
     scenes: Mapped[list[Scene]] = relationship(
-        "Scene",
         back_populates="project",
         order_by="Scene.created_at",
     )
@@ -34,12 +33,40 @@ class Scene(DeclarativeFieldsMixin):
     version: Mapped[int | None]
     source: Mapped[str | None]  # app url
 
-    elements: Mapped[list] = mapped_column(default=[])
     app_state: Mapped[dict] = mapped_column(default={})
+    elements: Mapped[list[Element]] = relationship(
+        # ??? only not deleted elements for first initial scene loading...
+    )
 
 
 class Element(DeclarativeFieldsMixin):
-    pass
+
+    # Excalidraw
+    # id -- cannot be primary_key as it's uniq only per scene
+    id: Mapped[ElementID] = mapped_column()
+    json: Mapped[dict]
+
+    # Meta for synchronization (resolve merging conflicts)
+    version: Mapped[int]
+    version_nonce: Mapped[int]
+    updated: Mapped[int]
+
+    # ExcalidrawImageElement props
+    file_id: Mapped[str | None]
+    status: Mapped[str | None]
+
+    # pg_id = mapped_column(
+    #     primary_key=True,
+    #     default=lambda: uuid.uuid4(),
+    # )
+    scene_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(Scene.id),
+        index=True,
+    )
+    __table_args__ = (
+        #
+        PrimaryKeyConstraint(scene_id, id),
+    )
 
 
 class File(DeclarativeFieldsMixin):

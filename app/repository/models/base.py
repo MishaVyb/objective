@@ -109,6 +109,7 @@ class DeclarativeFieldsMixin(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc),
+        index=True,  # for ORDER_BY better performance
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         onupdate=lambda: datetime.now(timezone.utc),

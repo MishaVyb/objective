@@ -121,48 +121,16 @@ async def copy_scene(
     """Duplicate scene. Supports overrides."""
     original = await db.scenes.get(scene_id)
 
-    # # handle files:
-    # if original.created_by_id != db.users.current_user.id:
-    #     logger.info("Coping external scene. Handle file. ")
-
-    #     tasks: list[Task[schemas.FileExtended]] = []
-    #     async with TaskGroup() as tg:
-    #         for file in original.files:
-    #             coro = db.files.get_one(
-    #                 file_id=file.file_id, created_by_id=file.created_by_id
-    #             )
-    #             tasks.append(tg.create_task(coro))
-
-    #     original_files = [t.result() for t in tasks]
-    #     for file in original_files:
-
-    #         # NOTE
-    #         # extra case when user copies external Scene (and its Files) more than once
-    #         if current_file := await db.files.get_one_or_none(file_id=file.file_id):
-    #             logger.warning(
-    #                 "Found existing file: %s. "
-    #                 "Delete previous file to be replaced with copied one. ",
-    #                 current_file.id,
-    #             )
-    #             await db.files.delete(current_file.id)
-
-    #         logger.warning("Copy file: %s. ", file.id)
-    #         await db.files.create(schemas.FileCreate.model_build(file))
-
-    # handle elements:
-    ...
-
-    # handle scene
+    # merge original values and payload update
+    values = original.model_dump() | payload.model_dump(
+        exclude_unset=True,
+        exclude={"project_id"},
+    )
     p = schemas.SceneCreate.model_build(
-        **(
-            original.model_dump()
-            | payload.model_dump(exclude_unset=True, exclude={"project_id"})
-        ),
+        **values,
         project_id=payload.project_id or original.project.id,
     )
-    instance = await db.scenes.create(p, refresh=True)
-
-    return instance
+    return await db.scenes.create(p, refresh=True)
 
 
 @scenes.patch("/{scene_id}", status_code=status.HTTP_200_OK)
@@ -183,6 +151,37 @@ async def delete_scene(
 ) -> schemas.SceneSimplified:
     """Mark as deleted."""
     return await db.scenes.update(scene_id, is_deleted=True)
+
+
+########################################################################################
+# Elements
+########################################################################################
+
+
+class _ElementsFiltersQuery(schemas.ElementsFilters, as_query=True):
+    pass
+
+
+# TODO
+# @scenes.get("/{scene_id}/elements", status_code=status.HTTP_200_OK)
+# async def get_scene_elements(
+#     scene_id: UUID,
+#     db: DatabaseRepositoriesDepends,
+#     *,
+#     payload: schemas.SceneUpdate,
+# ) -> schemas.SceneExtended:
+#     return await db.scenes.update(scene_id, payload, refresh=True)
+
+
+@scenes.post("/{scene_id}/elements/sync", status_code=status.HTTP_200_OK)
+async def sync_scene_elements(
+    scene_id: UUID,
+    db: DatabaseRepositoriesDepends,
+    *,
+    payload: schemas.SyncElementsRequest,
+    filters: Annotated[_ElementsFiltersQuery, Depends()],
+) -> schemas.SyncElementsResponse:
+    return await db.elements.sync(scene_id, payload, filters)
 
 
 ########################################################################################

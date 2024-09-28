@@ -132,6 +132,24 @@ class ObjectiveClient(HTTPXClientBase):
         )
 
     ########################################################################################
+    # elements
+    ########################################################################################
+
+    async def sync_scene_elements(
+        self,
+        id: UUID,
+        payload: schemas.SyncElementsRequest,
+        filters: schemas.ElementsFilters | None = None,
+    ) -> schemas.SyncElementsResponse:
+        return await self._call_service(
+            HTTPMethod.POST,
+            f"/scenes/{id}/elements/sync",
+            payload=payload,
+            params=filters,
+            response_schema=schemas.SyncElementsResponse,
+        )
+
+    ########################################################################################
     # files
     ########################################################################################
 

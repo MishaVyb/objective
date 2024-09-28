@@ -122,41 +122,48 @@ class GetScenesResponse(ItemsResponseBase[SceneExtended]):
 ########################################################################################
 
 
+ElementID = Annotated[str, ...]
+
+
 class AppState(BaseSchema, extra="allow"):
     ...
 
 
 class Element(BaseSchema, extra="allow"):
-    id: str
-    ...
+    id: ElementID
+    is_deleted: bool = Field(alias="isDeleted")
 
     # Meta for synchronization
-    seed: int = 1
-    """
-    Random integer used to seed shape generation so that the roughness shape
-    doesn't differ across renders.
-    """
-    version: int = 1
+    version: int
     """
     Integer that is sequentially incremented on each change. Used to reconcile
     elements during collaboration or when saving to server.
     """
-    version_nonce: int = 1
+    version_nonce: int = Field(alias="versionNonce")
     """
     Random integer that is regenerated on each change.
     Used for deterministic reconciliation of updates during collaboration,
     in case the versions (see above) are identical.
     """
-    updated: int = 1
+    updated: int
     """Epoch (ms) timestamp of last element update. """
 
-    # ExcalidrawImageElement props
-    file_id: str | None = None
-    status: Literal["pending"] | Literal["saved"] | Literal["error"] = "saved"
+    # Excalidraw Image Element props
+    file_id: str | None = Field(default=None, alias="fileId")
+    status: Literal["pending"] | Literal["saved"] | Literal["error"] | None = None
 
 
 class GetElementsResponse(ItemsResponseBase[Element]):
     next_sync_token: str | None = None
+
+
+class SyncElementsRequest(BaseSchema):
+    items: list[Element]
+    """Elements to append or/and reconcile with current Scene elements. """
+
+
+class SyncElementsResponse(GetElementsResponse):
+    pass
 
 
 ########################################################################################
@@ -198,6 +205,10 @@ class ProjectFilters(FiltersBase):
 
 class SceneFilters(FiltersBase):
     project_id: uuid.UUID | None = None
+
+
+class ElementsFilters(BaseSchema):
+    sync_token: str | None = None
 
 
 ########################################################################################

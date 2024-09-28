@@ -1,4 +1,5 @@
 import logging
+import uuid
 from contextlib import _AsyncGeneratorContextManager, asynccontextmanager
 from datetime import datetime
 from pprint import pformat
@@ -32,6 +33,18 @@ from tests.helpers import (
 )
 
 logger = logging.getLogger("conftest")
+
+
+@pytest.fixture(autouse=True)
+def patch_uuid_generator(mocker: MockerFixture):
+    counter = 0
+
+    def _side_effect():
+        nonlocal counter
+        counter += 1
+        return uuid.UUID(int=counter)
+
+    mocker.patch.object(uuid, "uuid4", side_effect=_side_effect)
 
 
 @pytest.fixture(scope="session")

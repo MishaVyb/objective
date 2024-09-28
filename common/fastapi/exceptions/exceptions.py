@@ -342,7 +342,7 @@ class BaseHTTPException(HTTPException):
         super().__init__(status_code, detail, headers)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.status_code=})"
+        return f"{self.__class__.__name__}({self.status_code=} {self.detail=})"
 
     def __str__(self) -> str:
         return self.__repr__()
@@ -363,22 +363,22 @@ class TokenError(BaseHTTPException):
 
 
 class NotEnoughRights(BaseHTTPException):
-    def __init__(self, detail: str | ErrorDetails):
+    def __init__(self, detail: str | ErrorDetails | Any):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 class NotFoundError(BaseHTTPException):
-    def __init__(self, detail: str | ErrorDetails):
+    def __init__(self, detail: str | ErrorDetails | Any):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
 
 class ConflictError(BaseHTTPException):
-    def __init__(self, detail: str | ErrorDetails):
+    def __init__(self, detail: str | ErrorDetails | Any):
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
 class ValidationError(BaseHTTPException):
-    def __init__(self, detail: str | ErrorDetails):
+    def __init__(self, detail: str | ErrorDetails | Any):
         super().__init__(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=detail,

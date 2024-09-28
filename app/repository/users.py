@@ -34,6 +34,7 @@ class UserRepository(SQLAlchemyUserDatabase[models.User, uuid.UUID]):
 
     async def create(self, create_dict: dict) -> models.User:
         user = self.user_table(**create_dict)
+        user.id = uuid.uuid4()
         self.session.add(user)
         await self.session.flush()
         await self.session.refresh(user)

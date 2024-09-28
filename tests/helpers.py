@@ -125,11 +125,11 @@ class parametrize:
 
 
 class AssertionDifferenceMixin:
-    _LIST_LEN_THRESHOLD = 3  # trim nested lists/dicts
-    _DICT_LEN_THRESHOLD = 10
+    _NESTED_LIST_LEN_THRESHOLD = 3  # trim nested lists/dicts
+    _NESTED_DICT_LEN_THRESHOLD = 10
 
     def get_operands(self, result: Any):
-        ...
+        raise NotImplementedError
 
     def diff(self, result: dict | BaseModel | Any):
         left, right = self.get_operands(result)
@@ -140,42 +140,49 @@ class AssertionDifferenceMixin:
         left, right = self.get_operands(result)
         return self._get_diff_lines(left, right)
 
-    def _trim_result_representation(self, result: Any):
+    def _trim_result_nested_items(self, result: Any):
         if isinstance(result, dict):
             for k in result:
                 if isinstance(result[k], list):
                     # trim nested list
-                    if len(result[k]) > self._LIST_LEN_THRESHOLD:
-                        result[k] = result[k][: self._LIST_LEN_THRESHOLD]
-                        result[k] += ["<trimmed>"]
+                    if len(result[k]) > self._NESTED_LIST_LEN_THRESHOLD:
+                        result[k] = result[k][: self._NESTED_LIST_LEN_THRESHOLD]
+                        result[k] += ["[TRUNCATED] ..."]
 
                     # trim nested list dict items
                     for item in result[k]:
                         if isinstance(item, dict):
-                            for _ in range(self._DICT_LEN_THRESHOLD, len(item)):
+                            for _ in range(self._NESTED_DICT_LEN_THRESHOLD, len(item)):
                                 item.popitem()
-                            if self._DICT_LEN_THRESHOLD < len(item):
-                                item |= {"<trimmed>": "<trimmed>"}
+                            if self._NESTED_DICT_LEN_THRESHOLD < len(item):
+                                item |= {"[TRUNCATED]": "..."}
 
                 # trim nested dict
                 if isinstance(result[k], dict):
                     item = result[k]
-                    for _ in range(self._DICT_LEN_THRESHOLD, len(item)):
+                    for _ in range(self._NESTED_DICT_LEN_THRESHOLD, len(item)):
                         item.popitem()
-                    if self._DICT_LEN_THRESHOLD < len(item):
-                        item |= {"<trimmed>": "<trimmed>"}
+                    if self._NESTED_DICT_LEN_THRESHOLD < len(item):
+                        item |= {"[TRUNCATED]": "..."}
 
         return result
 
+    def _trim_lines(self, lines: list[str]):
+        for i, line in enumerate(lines):
+            if len(line) > 1024:
+                lines[i] = line[:1024] + " [TRUNCATED]..."
+        return lines
+
     def _get_diff_lines(self, expected: Any, result: Any):
-        result = self._trim_result_representation(result)
-        expected_lines = pformat(expected).split("\n")
-        result_lines = pformat(result).split("\n")
-        diff = difflib.ndiff(expected_lines, result_lines)
+        result = self._trim_result_nested_items(result)
+
+        expected_lines = self._trim_lines(pformat(expected).split("\n"))
+        result_lines = self._trim_lines(pformat(result).split("\n"))
+        diff = self._trim_lines(list(difflib.ndiff(expected_lines, result_lines)))
         return [
             "",
             "========== DIFF ==========",
-            *list(diff),
+            *diff,
             "",
             "========== EXPECTED ==========",
             *expected_lines,

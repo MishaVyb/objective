@@ -19,6 +19,15 @@ pytestmark = [
 
 logger = logging.getLogger("conftest")
 
+ELEMENT = schemas.Element(
+    id="1",
+    is_deleted=False,
+    seed=1,
+    version=1,
+    version_nonce=1,
+    updated=1,
+)
+
 
 async def test_scene_crud(client: ObjectiveClient) -> None:
     PROJECT = (await client.get_projects()).items[0]
@@ -31,8 +40,8 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
     TEST_SCENE_FULL = schemas.SceneCreate(
         name="test-scene",
         elements=[
-            schemas.Element(id="1", file_id="file_1", extra_field_value="value"),
-            schemas.Element(id="2", file_id="file_2", extra_field_value="value"),
+            ELEMENT.model_remake(id="1", file_id="file_1", extra_field_value="value"),
+            ELEMENT.model_remake(id="2", file_id="file_2", extra_field_value="value"),
         ],
         app_state=schemas.AppState(extra_field_value="value"),
         files=[
@@ -121,16 +130,19 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
     assert result == IsPartialSchema(name="upd-full", is_deleted=False)
 
 
-async def test_scene_copy(client: ObjectiveClient, CLIENT_B: ObjectiveClient) -> None:
-    PROJECT = (await client.get_projects()).items[0]
-    SCENE = (await client.get_scenes()).items[0]
-    ANOTHER_PROJECT = await client.create_project(TEST_PROJECT)
-    ANOTHER_USER_PROJECT = (await CLIENT_B.get_projects()).items[0]
-    ANOTHER_USER_SCENE = (await CLIENT_B.get_scenes()).items[0]
+async def test_scene_copy(
+    CLIENT_A: ObjectiveClient,
+    CLIENT_B: ObjectiveClient,
+) -> None:
+    PROJECT = (await CLIENT_B.get_projects()).items[0]
+    SCENE = (await CLIENT_B.get_scenes()).items[0]
+    ANOTHER_PROJECT = await CLIENT_B.create_project(TEST_PROJECT)
+    ANOTHER_USER_PROJECT = (await CLIENT_A.get_projects()).items[0]
+    ANOTHER_USER_SCENE = (await CLIENT_A.get_scenes()).items[0]
 
     # [1] copy
     payload = schemas.SceneUpdate(name="copy")
-    result = await client.copy_scene(SCENE.id, payload)
+    result = await CLIENT_B.copy_scene(SCENE.id, payload)
     assert result.id != SCENE.id
     assert result == IsPartialSchema(
         payload,
@@ -140,7 +152,7 @@ async def test_scene_copy(client: ObjectiveClient, CLIENT_B: ObjectiveClient) ->
 
     # [2] copy and move
     payload = schemas.SceneUpdate(name="copy", project_id=ANOTHER_PROJECT.id)
-    result = await client.copy_scene(SCENE.id, payload)
+    result = await CLIENT_B.copy_scene(SCENE.id, payload)
     assert result.id != SCENE.id
     assert result == IsPartialSchema(
         name=payload.name,
@@ -150,7 +162,7 @@ async def test_scene_copy(client: ObjectiveClient, CLIENT_B: ObjectiveClient) ->
 
     # [3] copy another User scene to self project
     payload = schemas.SceneUpdate(name="copy", project_id=PROJECT.id)
-    result = await client.copy_scene(ANOTHER_USER_SCENE.id, payload)
+    result = await CLIENT_B.copy_scene(ANOTHER_USER_SCENE.id, payload)
     assert result.id != SCENE.id
     assert result == IsPartialSchema(
         name=payload.name,
@@ -158,7 +170,7 @@ async def test_scene_copy(client: ObjectiveClient, CLIENT_B: ObjectiveClient) ->
         elements=IsList(length=(1, ...)),
     )
 
-    # files from copied scene are not copied itself (doth scenes using the same files / db records)
+    # files from copied scene are not copied itself (both scenes using the same files / db records)
     initial_scene_file_ids = [
         element.file_id for element in ANOTHER_USER_SCENE.elements if element.file_id
     ]
@@ -169,9 +181,11 @@ async def test_scene_copy(client: ObjectiveClient, CLIENT_B: ObjectiveClient) ->
 
     # scene files accessible even after copy
     for file_id in copied_scene_file_ids:
-        res = await client.get_file(file_id)
+        res = await CLIENT_B.get_file(file_id)
         assert res == IsPartialSchema(
             data=IsStr(min_length=10),
+            #
+            # and files is created by initial user, who send those file for the first time
             created_by_id=ANOTHER_USER_PROJECT.created_by_id,
         )
 
@@ -279,9 +293,12 @@ async def test_scene_access_rights(
 
     # update/delete
     with pytest.raises(NotEnoughRights):
-        await CLIENT_A.update_project(PROJECT_B.id, schemas.ProjectUpdate(name="upd"))
+        await CLIENT_A.update_scene(
+            PROJECT_B.scenes[0].id,
+            schemas.SceneUpdate(name="upd"),
+        )
     with pytest.raises(NotEnoughRights):
-        await CLIENT_A.delete_project(PROJECT_B.id)
+        await CLIENT_A.delete_scene(PROJECT_B.scenes[0].id)
 
     # create scene with another user project
     payload = schemas.SceneCreate(name="name", project_id=PROJECT_B.id)
@@ -292,6 +309,9 @@ async def test_scene_access_rights(
     payload = schemas.SceneUpdate(name="copy", project_id=PROJECT_B.id)
     with pytest.raises(NotEnoughRights):
         await CLIENT_A.copy_scene(PROJECT_A.scenes[0].id, payload)
+
+    # sync elements
+    # TODO
 
 
 async def test_scene_401(setup_clients: dict[str | int, ObjectiveClient]):

@@ -347,8 +347,6 @@ class ModelConstructor(BaseModel):
         _self_exclude_defaults: bool = False,
         **extra_values,
     ) -> Self:
-        if missing := set(extra_values) - set(self.model_fields):
-            raise ValueError(missing)
         return self.model_validate(
             self.model_dump(
                 include=_self_include,
