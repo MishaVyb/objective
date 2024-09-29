@@ -9,6 +9,7 @@ from app.client import ObjectiveClient
 from app.exceptions import NotFoundInstanceError
 from app.schemas import schemas
 from common.fastapi.exceptions.exceptions import NotEnoughRights
+from tests.conftest_data import ExcalidrawElement
 from tests.helpers import IsList, IsPartialSchema
 from tests.routes.test_projects import TEST_PROJECT
 
@@ -19,14 +20,7 @@ pytestmark = [
 
 logger = logging.getLogger("conftest")
 
-ELEMENT = schemas.Element(
-    id="1",
-    is_deleted=False,
-    seed=1,
-    version=1,
-    version_nonce=1,
-    updated=1,
-)
+_EPOCH = 1_000.0
 
 
 async def test_scene_crud(client: ObjectiveClient) -> None:
@@ -40,8 +34,8 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
     TEST_SCENE_FULL = schemas.SceneCreate(
         name="test-scene",
         elements=[
-            ELEMENT.model_remake(id="1", file_id="file_1", extra_field_value="value"),
-            ELEMENT.model_remake(id="2", file_id="file_2", extra_field_value="value"),
+            _ELEMENT.model_remake(id="1", file_id="file_1", extra_field_value="value"),
+            _ELEMENT.model_remake(id="2", file_id="file_2", extra_field_value="value"),
         ],
         app_state=schemas.AppState(extra_field_value="value"),
         files=[
@@ -188,6 +182,149 @@ async def test_scene_copy(
             # and files is created by initial user, who send those file for the first time
             created_by_id=ANOTHER_USER_PROJECT.created_by_id,
         )
+
+
+async def test_scene_elements_crud(
+    CLIENT_A: ObjectiveClient,
+    CLIENT_B: ObjectiveClient,
+) -> None:
+    PROJECT = (await CLIENT_A.get_projects()).items[0]
+    TEST_SCENE_FULL = schemas.SceneCreate(
+        name="test-scene",
+        elements=[
+            ExcalidrawElement(id="element_1"),
+            ExcalidrawElement(id="element_2"),
+        ],
+        app_state=schemas.AppState(),
+        files=[],
+        project_id=PROJECT.id,
+    )
+    SCENE = await CLIENT_A.create_scene(TEST_SCENE_FULL)
+
+    ########################################################################################
+    # [1] append new els
+    ########################################################################################
+
+    el_3 = ExcalidrawElement(id="element_3")
+    el_4 = ExcalidrawElement(id="element_4")
+    expected_els = [  # only previous elements which NEW for client
+        IsPartialSchema(id="element_1"),
+        IsPartialSchema(id="element_2"),
+    ]
+    r = await CLIENT_A.sync_elements(SCENE.id, [el_3, el_4])
+    assert r.items == expected_els
+    assert (st := r.next_sync_token)
+
+    # request all elements from the beginning
+    expected_els = [
+        IsPartialSchema(id="element_1"),
+        IsPartialSchema(id="element_2"),
+        IsPartialSchema(id="element_3"),
+        IsPartialSchema(id="element_4"),
+    ]
+    r = await CLIENT_A.sync_elements(SCENE.id)
+    assert r.items == expected_els
+
+    # request elements after prev sync
+    r = await CLIENT_A.sync_elements(SCENE.id, sync_token=st)
+    assert r.items == []
+
+    ########################################################################################
+    # [2] update els
+    # - check merge updated depending on 'updated', NOT 'version'
+    ########################################################################################
+
+    el_4_updated_A = (
+        # this update A has higher 'version',
+        # but it would be omitted, because it has been made before next update B
+        el_4.model_copy()
+        .update(key="UPDATE_1_B")
+        .update(key="UPDATE_2_B")
+        .update(key="UPDATE_3_B")
+    )
+    el_4_updated_B = el_4.model_copy().update(key="UPDATE_1_A")
+
+    el_3_updated_C = el_3.model_copy().update(key="UPDATE_1_C")
+    el_4_updated_C = el_4.model_copy().update(key="UPDATE_1_C")
+
+    r = await CLIENT_A.sync_elements(SCENE.id, [el_4_updated_B], sync_token=st)
+    assert r.items == []
+
+    # check el update has been applied
+    r = await CLIENT_A.sync_elements(SCENE.id, sync_token=st)
+    assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
+
+    # [2.2] send the same update again
+    # update would be ignored because of the same 'version_nonce'
+    el_4_updated_B.key = "NOT_PROPER_UPDATE_VALUE"
+    r = await CLIENT_A.sync_elements(SCENE.id, [el_4_updated_B], sync_token=st)
+    assert r.items == []
+
+    # check update has NOT been taken
+    r = await CLIENT_A.sync_elements(SCENE.id, sync_token=st)
+    assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
+
+    # [2.3] send update A for the same element that was made earlier than update B
+    r = await CLIENT_A.sync_elements(SCENE.id, [el_4_updated_A], sync_token=st)
+    assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
+
+    # check update has NOT been taken
+    r = await CLIENT_A.sync_elements(SCENE.id, sync_token=st)
+    assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
+
+    # [2.3] send update C -- would be taken fully
+    r = await CLIENT_A.sync_elements(
+        SCENE.id,
+        [el_3_updated_C, el_4_updated_C],
+        sync_token=st,
+    )
+    assert r.items == []
+
+    # check el update has been applied
+    r = await CLIENT_A.sync_elements(SCENE.id, sync_token=st)
+    assert r.items == [
+        IsPartialSchema(id="element_3", key="UPDATE_1_C"),
+        IsPartialSchema(id="element_4", key="UPDATE_1_C"),
+    ]
+
+    ########################################################################################
+    # [3] update & create
+    ########################################################################################
+
+    el_4_updated_D = el_4.model_copy().update(key="UPDATE_1_D")
+    el_5 = ExcalidrawElement(id="element_5")
+    r = await CLIENT_A.sync_elements(SCENE.id, [el_4_updated_D, el_5], sync_token=st)
+    assert r.items == [
+        IsPartialSchema(id="element_3", key="UPDATE_1_C"),  # from prev update request
+    ]
+
+    # check el update has been applied
+    r = await CLIENT_A.sync_elements(SCENE.id, sync_token=st)
+    assert r.items == [
+        IsPartialSchema(id="element_3", key="UPDATE_1_C"),
+        IsPartialSchema(id="element_4", key="UPDATE_1_D"),
+        IsPartialSchema(id="element_5"),
+    ]
+
+    ########################################################################################
+    # [4] next sync token
+    # - expecting elements to sync from server, even if it was created EARLIER than last
+    # client request, but it was stored at db AFTER that last sync request
+    ########################################################################################
+    return
+    el_6 = ExcalidrawElement(id="element_6")
+
+    r = await CLIENT_A.sync_elements(SCENE.id)
+    assert (sync_token := r.next_sync_token)
+
+    # another client append el 6
+    await CLIENT_A.sync_elements(SCENE.id, [el_6])
+
+    # re-fetch from prev sync_token
+    r = await CLIENT_A.sync_elements(SCENE.id, sync_token=sync_token)
+    assert r.items == [
+        IsPartialSchema(id="element_6"),
+    ]
 
 
 async def test_files_crud(client: ObjectiveClient) -> None:

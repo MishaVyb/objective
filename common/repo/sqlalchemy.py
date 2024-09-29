@@ -52,12 +52,18 @@ else:
 logger = logging.getLogger(__name__)
 
 _ModelType = TypeVar("_ModelType", bound=DatabaseDeclarativeFieldsMixin)
-_SchemaType = TypeVar("_SchemaType", bound=DeclarativeFieldsMixin)
+_SchemaType = TypeVar(
+    "_SchemaType",
+    bound=DeclarativeFieldsMixin | BaseSchema,
+)
 _CreateSchemaType = TypeVar(
     "_CreateSchemaType",
     bound=CreateSchemaMixin | CreateWithIDSchemaMixin | BaseSchema,
 )
-_UpdateSchemaType = TypeVar("_UpdateSchemaType", bound=UpdateSchemaMixin)
+_UpdateSchemaType = TypeVar(
+    "_UpdateSchemaType",
+    bound=UpdateSchemaMixin | BaseSchema,
+)
 _IdentityKeyType = tuple[Type[_ModelType], tuple[Any, ...], Optional[Any]]
 
 _CLASS_DEFAULT: Any = object()

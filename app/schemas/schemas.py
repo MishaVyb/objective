@@ -145,7 +145,7 @@ class Element(BaseSchema, extra="allow"):
     Used for deterministic reconciliation of updates during collaboration,
     in case the versions (see above) are identical.
     """
-    updated: int
+    updated: float
     """Epoch (ms) timestamp of last element update. """
 
     # Excalidraw Image Element props
@@ -154,7 +154,7 @@ class Element(BaseSchema, extra="allow"):
 
 
 class GetElementsResponse(ItemsResponseBase[Element]):
-    next_sync_token: str | None = None
+    next_sync_token: float
 
 
 class SyncElementsRequest(BaseSchema):
@@ -208,7 +208,7 @@ class SceneFilters(FiltersBase):
 
 
 class ElementsFilters(BaseSchema):
-    sync_token: str | None = None
+    sync_token: float = 0.0
 
 
 ########################################################################################

@@ -1,3 +1,4 @@
+import time
 import uuid
 from dataclasses import dataclass, fields
 from logging import Logger
@@ -5,6 +6,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Never, Self, Sequence
 from uuid import UUID
 
 from fastapi import Depends
+from sqlalchemy import ColumnExpressionArgument, Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.interfaces import ORMOption
@@ -12,6 +14,7 @@ from typing_extensions import deprecated
 
 from app.config import AppSettings
 from app.repository.users import UserRepository
+from app.schemas.schemas import FiltersBase
 from common.fastapi.exceptions.exceptions import NotEnoughRights
 from common.repo.sqlalchemy import (
     _CLASS_DEFAULT,
@@ -91,17 +94,18 @@ class ServiceRepositoryBase(
         await self.check_update_rights(instance)
         return instance
 
-    async def pending_create(self, payload: _CreateSchemaType, **extra_values) -> None:
-        instance = await super().pending_create(payload, **extra_values)
-        await self.check_create_rights(instance)
-        return instance
+    # TODO check access rights
+    # async def pending_create(self, payload: _CreateSchemaType, **extra_values) -> None:
+    #     instance = await super().pending_create(payload, **extra_values)
+    #     await self.check_create_rights(instance)
+    #     return instance
 
-    async def pending_update(
-        self, pk: UUID, payload: _UpdateSchemaType | None = None, **extra_values
-    ) -> None:
-        instance = await super().pending_update(pk, payload, **extra_values)
-        await self.check_create_rights(instance)
-        return instance
+    # async def pending_update(
+    #     self, pk: UUID, payload: _UpdateSchemaType | None = None, **extra_values
+    # ) -> None:
+    #     instance = await super().pending_update(pk, payload, **extra_values)
+    #     await self.check_create_rights(instance)
+    #     return instance
 
     # TMP solution
     async def check_read_rights(self, instance: _SchemaType):
@@ -111,7 +115,7 @@ class ServiceRepositoryBase(
         pass
 
     async def check_update_rights(self, instance: _SchemaType):
-        if self.current_user.id != instance.created_by_id:
+        if self.current_user.id != instance.created_by_id:  # type: ignore
             raise NotEnoughRights(f"Not enough rights to update: {instance}")
 
 
@@ -208,7 +212,7 @@ class SceneRepository(
                 await self.db.files.create(file)
 
         for el in payload.elements or []:
-            await self.db.elements.pending_create(el, scene_id=scene.id)
+            await self.db.elements.pending_create(el, _scene_id=scene.id)
 
         await self.db.all.flush()
         return await self.get(scene.id, refresh=True)
@@ -220,7 +224,7 @@ class SceneRepository(
 
 
 class ElementRepository(
-    ServiceRepositoryBase[
+    ServiceRepositoryBase[  # type: ignore
         models.Element,
         schemas.ElementInternal,  # get
         schemas.Element,  # create
@@ -231,10 +235,28 @@ class ElementRepository(
     schema = schemas.ElementInternal
 
     def _use_payload(self, payload: schemas.Element | None, **extra_values) -> dict:
+        extra_values.pop("created_by_id", None)
+        extra_values.pop("updated_by_id", None)
         data = super()._use_payload(payload, **extra_values)
         if payload:
-            data["json"] = payload.model_dump(exclude_unset=True)
+            data["_json"] = payload.model_dump(exclude_unset=True)
         return data
+
+    # NOTE  no ORDER BY statement for Elements
+    def _use_statement_get_instances_list(
+        self,
+        filters: FiltersBase | None = None,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        is_deleted: bool = False,
+        clauses: list[ColumnExpressionArgument] = (),
+        **extra_filters,
+    ) -> Select:
+        filters = self._use_filters(filters, is_deleted=is_deleted, **extra_filters)
+        options = self._use_options(options)
+
+        self.logger.debug("[DATABASE] Querying %r %s. ", self, filters)
+        stm = select(self.model).where(*clauses).filter_by(**filters).options(*options)
+        return stm
 
     async def sync(
         self,
@@ -244,46 +266,75 @@ class ElementRepository(
     ):
         payload_els = {el.id: el for el in payload.items}
 
+        # ???
+        # - using client 'updated' timestamp, not 'created_at'
+        # - respond with all updated items from prev sync,
+        #   including those that uses just sent himself
         items = await self.db.elements.get_where(
-            clauses=[self.model.scene_id == scene_id, self.model.id.in_(payload_els)],
+            clauses=[
+                self.model._scene_id == scene_id,
+                or_(
+                    # using payload element ids and updated timestamp to get
+                    # - elements to merge
+                    # - elements to respond
+                    self.model.id.in_(payload_els),
+                    self.model._updated > filters.sync_token,
+                ),
+            ],
         )
-        current_els = {el.id: el for el in items}
-        new_els = {el.id: el for el in payload_els.values() if el.id not in current_els}
+        db_els = {el.id: el for el in items}
+        new_els = {el.id: el for el in payload_els.values() if el.id not in db_els}
+        merge_els = {el.id: el for el in payload_els.values() if el.id in db_els}
+
+        # new db elements to respond with
+        respond_els = {el.id: el for el in db_els.values() if el.id not in payload_els}
 
         # reconcile existing
+        for element_id in merge_els:
+            payload_el = payload_els[element_id]
+            current_el = db_els[element_id]
 
-        for id in current_els:
-            payload_el = payload_els[id]
-            current_el = current_els[id]
+            # UNUSED
+            # It's looks like 'version' is unused placeholder because we have
+            # to compare which version is more actual depending on 'updated'
+            # timestamp (not el version), because different updates might came
+            # with equal version..
+            #
+            # if payload_el.version > current_el.version:
 
-            if payload_el.version > current_el.version:
-                await self.pending_update(payload_el.id, payload_el)
+            if payload_el.version_nonce == current_el.version_nonce:
+                # the same client request sync for the same element twice (or more)
+                # assuming elements are fully equal
+                continue
 
-            else:
-                if payload_el.version_nonce == current_el.version_nonce:
-                    # the same client request sync for the same element twice (or more)
-                    # assuming elements are fully equal
-                    continue
+            # 2 clients have made update for the same element
+            # - one client update has been stored already
+            # - another client change just has come
 
-                # 2 clients have made update for the same element
-                # - one client update has been stored already
-                # - another client change just has come
+            # figure out who made last update on client side
+            if payload_el.updated < current_el.updated:
+                # extend respond items with element to update on client side
+                respond_els[element_id] = current_el
+                continue
 
-                # figure out who made last update on client side
-                if payload_el.updated < current_el.updated:
-                    continue
-
-                await self.pending_update(payload_el.id, payload_el)
+            await self.pending_update((scene_id, element_id), payload_el)
 
         # append new
         for el in new_els.values():
-            await self.pending_create(el, scene_id=scene_id)
+            await self.pending_create(el, _scene_id=scene_id)
 
-        if filters.sync_token:
-            return ...
+        await self.session.flush()
+        next_sync_token = time.time()
+        return schemas.SyncElementsResponse.model_construct(
+            items=list(respond_els.values()),
+            next_sync_token=next_sync_token,
+        )
 
-        # inappropriate usage...
-        return await self.db.elements.get_where(scene_id=scene_id)
+    # FIXME typing
+    async def pending_update(
+        self, pk: Any, payload: schemas.Element | None = None, **extra_values
+    ) -> None:
+        return await super().pending_update(pk, payload, **extra_values)
 
 
 class FileRepository(

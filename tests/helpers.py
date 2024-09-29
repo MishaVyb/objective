@@ -3,7 +3,7 @@ import inspect
 import logging
 from contextlib import asynccontextmanager
 from pprint import pformat
-from typing import Any, Callable, Generic, Self, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, Self, Sequence, TypeVar
 
 import dirty_equals
 import pytest
@@ -295,6 +295,14 @@ class IsList(dirty_equals.IsList, Generic[_T], AssertionDifferenceMixin):
             r.append(result_item)
 
         return l, r
+
+
+class IsListContains(IsList):
+
+    if not TYPE_CHECKING:
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs, length=ANY_LENGTH, check_order=False)
 
 
 ########################################################################################

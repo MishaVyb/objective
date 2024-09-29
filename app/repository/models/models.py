@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 
 from sqlalchemy import ForeignKey, PrimaryKeyConstraint
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.schemas.schemas import ElementID, FileID
 
-from .base import DeclarativeFieldsMixin
+from .base import Base, DeclarativeFieldsMixin
 from .users import User
 
 
@@ -39,33 +40,35 @@ class Scene(DeclarativeFieldsMixin):
     )
 
 
-class Element(DeclarativeFieldsMixin):
-
+class Element(Base):
     # Excalidraw
-    # id -- cannot be primary_key as it's uniq only per scene
-    id: Mapped[ElementID] = mapped_column()
-    json: Mapped[dict]
+    id: Mapped[ElementID] = mapped_column()  # uniq per scene_id
 
     # Meta for synchronization (resolve merging conflicts)
     version: Mapped[int]
     version_nonce: Mapped[int]
-    updated: Mapped[int]
+    updated: Mapped[float]
 
     # ExcalidrawImageElement props
     file_id: Mapped[str | None]
     status: Mapped[str | None]
 
-    # pg_id = mapped_column(
-    #     primary_key=True,
-    #     default=lambda: uuid.uuid4(),
+    _json: Mapped[dict]
+    # _updated: Mapped[datetime] = mapped_column(
+    #     default=lambda: datetime.now(timezone.utc),
+    #     onupdate=lambda: datetime.now(timezone.utc),
     # )
-    scene_id: Mapped[uuid.UUID] = mapped_column(
+    _updated: Mapped[int] = mapped_column(
+        default=lambda: time.time(),
+        onupdate=lambda: time.time(),
+    )
+    _scene_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey(Scene.id),
         index=True,
     )
     __table_args__ = (
         #
-        PrimaryKeyConstraint(scene_id, id),
+        PrimaryKeyConstraint(_scene_id, id),
     )
 
 

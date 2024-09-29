@@ -1,5 +1,8 @@
 from http import HTTPMethod
+from typing import Sequence
 from uuid import UUID
+
+from pydantic import BaseModel
 
 from app.schemas import schemas
 from common.async_client import HTTPXClientBase
@@ -7,6 +10,12 @@ from common.async_client import HTTPXClientBase
 
 class ObjectiveClient(HTTPXClientBase):
     _api_prefix = "/api/v2/"
+
+    def _use_json(self, payload: BaseModel | None = None) -> str | None:
+        if not payload:
+            return None
+        # not exclude_unset in order to apply default ExcalidrawElement props
+        return payload.model_dump_json(by_alias=True)
 
     ########################################################################################
     # users
@@ -135,17 +144,23 @@ class ObjectiveClient(HTTPXClientBase):
     # elements
     ########################################################################################
 
-    async def sync_scene_elements(
+    async def sync_elements(
         self,
         id: UUID,
-        payload: schemas.SyncElementsRequest,
-        filters: schemas.ElementsFilters | None = None,
+        payload: schemas.SyncElementsRequest | Sequence[schemas.Element] = [],
+        *,
+        sync_token: float | None = None,
     ) -> schemas.SyncElementsResponse:
+        if isinstance(payload, list):
+            payload = schemas.SyncElementsRequest(items=payload)
+        params = None
+        if sync_token is not None:
+            params = schemas.ElementsFilters(sync_token=sync_token)
         return await self._call_service(
             HTTPMethod.POST,
             f"/scenes/{id}/elements/sync",
             payload=payload,
-            params=filters,
+            params=params,
             response_schema=schemas.SyncElementsResponse,
         )
 
