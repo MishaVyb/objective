@@ -222,11 +222,11 @@ async def test_scene_elements_crud(
         IsPartialSchema(id="element_3"),
         IsPartialSchema(id="element_4"),
     ]
-    r = await CLIENT.reconcile_els(SCENE.id)
+    r = await CLIENT.get_els(SCENE.id)
     assert r.items == expected_els
 
     # request elements after prev sync
-    r = await CLIENT.reconcile_els(SCENE.id, sync_token=st)
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
     assert r.items == []
 
     ########################################################################################
@@ -251,7 +251,7 @@ async def test_scene_elements_crud(
     assert r.items == []
 
     # check el update has been applied
-    r = await CLIENT.reconcile_els(SCENE.id, sync_token=st)
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
     assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
 
     # [2.2] send the same update again
@@ -261,7 +261,7 @@ async def test_scene_elements_crud(
     assert r.items == []
 
     # check update has NOT been taken
-    r = await CLIENT.reconcile_els(SCENE.id, sync_token=st)
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
     assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
 
     # [2.3] send update A for the same element that was made earlier than update B
@@ -269,7 +269,7 @@ async def test_scene_elements_crud(
     assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
 
     # check update has NOT been taken
-    r = await CLIENT.reconcile_els(SCENE.id, sync_token=st)
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
     assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
 
     # [2.3] send update C -- would be taken fully
@@ -281,7 +281,7 @@ async def test_scene_elements_crud(
     assert r.items == []
 
     # check el update has been applied
-    r = await CLIENT.reconcile_els(SCENE.id, sync_token=st)
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
     assert r.items == [
         IsPartialSchema(id="element_3", key="UPDATE_1_C"),
         IsPartialSchema(id="element_4", key="UPDATE_1_C"),
@@ -299,7 +299,7 @@ async def test_scene_elements_crud(
     ]
 
     # check el update has been applied
-    r = await CLIENT.reconcile_els(SCENE.id, sync_token=st)
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
     assert r.items == [
         IsPartialSchema(id="element_3", key="UPDATE_1_C"),
         IsPartialSchema(id="element_4", key="UPDATE_1_D"),
@@ -312,8 +312,10 @@ async def test_scene_elements_next_sync_token(
     SCENE: schemas.SceneExtended,
 ) -> None:
     """
+    Next sync token filters against **database** '_updated' field (not client).
+
     Expecting elements to sync from server, even if it was created EARLIER than last
-    client request, but it was stored at db AFTER that last sync request
+    client request, but it was stored at db AFTER that last sync request.
     """
     el_6 = ExcalidrawElement(id="element_6")
 
@@ -381,6 +383,35 @@ async def test_scene_elements_next_sync_token_no_lock_scene(
     res_1 = t1.result()
     res_2 = t2.result()
     ...
+
+
+async def test_scene_elements_next_sync_token_no_lock_for_get_request(
+    CLIENT: ObjectiveClient,
+    SCENE: schemas.SceneExtended,
+) -> None:
+    """
+    Update/Read for one scene happened simultaneity. No lock.
+    """
+    el = ExcalidrawElement(id="element")
+    async with TaskGroup() as group:
+        coro1 = CLIENT.reconcile_els(SCENE.id, [el])
+        coro2 = CLIENT.get_els(SCENE.id)
+        t1 = group.create_task(coro1)
+        t2 = group.create_task(coro2)
+
+    upd_res = t1.result()
+    read_res = t2.result()
+
+    assert upd_res.items == []
+    assert read_res.items == []
+
+    # later read sync token could be used to get fresh el (other request result)
+    read_res = await CLIENT.get_els(SCENE.id, sync_token=read_res.next_sync_token)
+    assert read_res.items == [IsPartialSchema(el)]
+
+    # after that no fresh elements to get
+    read_res = await CLIENT.get_els(SCENE.id, sync_token=read_res.next_sync_token)
+    assert read_res.items == []
 
 
 async def test_files_crud(client: ObjectiveClient) -> None:

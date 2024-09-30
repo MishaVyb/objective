@@ -259,6 +259,19 @@ class ElementRepository(
         stm = select(self.model).where(*clauses).filter_by(**filters).options(*options)
         return stm
 
+    async def get(self, scene_id: uuid.UUID, filters: schemas.ElementsFilters):
+        next_sync_token = time.time()
+        items: list[schemas.Element] = await self.db.elements.get_where(
+            clauses=[
+                self.model._scene_id == scene_id,
+                self.model._updated > filters.sync_token,
+            ],
+        )
+        return schemas.ReconcileElementsResponse.model_construct(
+            items=items,
+            next_sync_token=next_sync_token,
+        )
+
     async def reconcile(
         self,
         scene_id: uuid.UUID,
@@ -293,9 +306,9 @@ class ElementRepository(
             clauses=[
                 self.model._scene_id == scene_id,
                 or_(
-                    # using payload element ids and updated timestamp to get
-                    # - elements to merge
-                    # - elements to respond
+                    # using payload element ids and db updated timestamp to:
+                    # - to get elements to merge with payload
+                    # - te get fresh elements to respond
                     self.model.id.in_(payload_els),
                     self.model._updated > filters.sync_token,
                 ),

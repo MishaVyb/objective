@@ -162,15 +162,14 @@ class _ElementsFiltersQuery(schemas.ElementsFilters, as_query=True):
     pass
 
 
-# TODO
-# @scenes.get("/{scene_id}/elements", status_code=status.HTTP_200_OK)
-# async def get_scene_elements(
-#     scene_id: UUID,
-#     db: DatabaseRepositoriesDepends,
-#     *,
-#     filters: Annotated[_ElementsFiltersQuery, Depends()],
-# ) -> schemas.SceneExtended:
-#     return await db.scenes.update(scene_id, payload, refresh=True)
+@scenes.get("/{scene_id}/elements", status_code=status.HTTP_200_OK)
+async def get_scene_elements(
+    scene_id: UUID,
+    db: DatabaseRepositoriesDepends,
+    *,
+    filters: Annotated[_ElementsFiltersQuery, Depends()],
+) -> schemas.ReconcileElementsResponse:
+    return await db.elements.get(scene_id, filters)
 
 
 @scenes.post("/{scene_id}/elements", status_code=status.HTTP_200_OK)

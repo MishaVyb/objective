@@ -41,24 +41,21 @@ class Scene(DeclarativeFieldsMixin):
 
 
 class Element(Base):
-    # Excalidraw
+    # Excalidraw Element values (client values)
     id: Mapped[ElementID] = mapped_column()  # uniq per scene_id
+    updated: Mapped[float]  # UNUSED
+    version: Mapped[int]  # UNUSED
+    version_nonce: Mapped[int]  # like 'etag'
 
-    # Meta for synchronization (resolve merging conflicts)
-    version: Mapped[int]
-    version_nonce: Mapped[int]
-    updated: Mapped[float]
-
-    # ExcalidrawImageElement props
+    # image el props
     file_id: Mapped[str | None]
     status: Mapped[str | None]
 
+    # Database only values
     _json: Mapped[dict]
-    # _updated: Mapped[datetime] = mapped_column(
-    #     default=lambda: datetime.now(timezone.utc),
-    #     onupdate=lambda: datetime.now(timezone.utc),
-    # )
-    _updated: Mapped[int] = mapped_column(
+    _updated: Mapped[
+        int
+    ] = mapped_column(  # using service _updated timestamp, not client
         default=lambda: time.time(),
         onupdate=lambda: time.time(),
     )
