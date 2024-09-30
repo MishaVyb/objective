@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging.config
+import uuid
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Type
 
@@ -56,6 +58,7 @@ async def lifespan(app: ObjectiveAPP):
         autoflush=True,
         expire_on_commit=False,  # FIXME db repos should return Pydantic only
     )
+    app.state.scene_locks = {}
 
     try:
         yield
@@ -89,6 +92,8 @@ class ObjectiveAPP(FastAPI):
             current_user: AuthenticatedUser
             engine: AsyncEngine
             session_maker: async_sessionmaker[AsyncSession]
+
+            scene_locks: dict[uuid.UUID, asyncio.Lock]
 
         state: State
 

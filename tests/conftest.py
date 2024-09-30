@@ -278,3 +278,35 @@ def CLIENT_A(setup_clients: dict[int, ObjectiveClient]):
 @pytest.fixture
 def CLIENT_B(setup_clients: dict[int, ObjectiveClient]):
     return setup_clients[2]
+
+
+########################################################################################
+# User A data:
+########################################################################################
+
+
+@pytest.fixture
+def USER(setup_users: dict[int, schemas.User]):
+    return setup_users[1]
+
+
+@pytest.fixture
+def CLIENT(setup_clients: dict[int, ObjectiveClient]):
+    return setup_clients[1]
+
+
+@pytest.fixture
+async def PROJECT(CLIENT_A: ObjectiveClient):
+    return (await CLIENT_A.get_projects()).items[0]
+
+
+@pytest.fixture
+async def SCENE(PROJECT: schemas.Project, CLIENT_A: ObjectiveClient):
+    p = schemas.SceneCreate(name="test-scene", project_id=PROJECT.id)
+    return await CLIENT_A.create_scene(p)
+
+
+@pytest.fixture
+async def SCENE_2(PROJECT: schemas.Project, CLIENT_A: ObjectiveClient):
+    p = schemas.SceneCreate(name="test-scene-2", project_id=PROJECT.id)
+    return await CLIENT_A.create_scene(p)

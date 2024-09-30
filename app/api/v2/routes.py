@@ -168,20 +168,20 @@ class _ElementsFiltersQuery(schemas.ElementsFilters, as_query=True):
 #     scene_id: UUID,
 #     db: DatabaseRepositoriesDepends,
 #     *,
-#     payload: schemas.SceneUpdate,
+#     filters: Annotated[_ElementsFiltersQuery, Depends()],
 # ) -> schemas.SceneExtended:
 #     return await db.scenes.update(scene_id, payload, refresh=True)
 
 
-@scenes.post("/{scene_id}/elements/sync", status_code=status.HTTP_200_OK)
-async def sync_scene_elements(
+@scenes.post("/{scene_id}/elements", status_code=status.HTTP_200_OK)
+async def reconcile_scene_elements(
     scene_id: UUID,
     db: DatabaseRepositoriesDepends,
     *,
     payload: schemas.SyncElementsRequest,
     filters: Annotated[_ElementsFiltersQuery, Depends()],
-) -> schemas.SyncElementsResponse:
-    return await db.elements.sync(scene_id, payload, filters)
+) -> schemas.ReconcileElementsResponse:
+    return await db.elements.reconcile(scene_id, payload, filters)
 
 
 ########################################################################################

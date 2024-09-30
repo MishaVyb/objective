@@ -2,7 +2,7 @@ import random
 import time
 from typing import TYPE_CHECKING, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.schemas import Element, ElementID
 
@@ -18,6 +18,15 @@ class ExcalidrawElement(Element):
     version: int = 1
     version_nonce: int = Field(default_factory=_get_element_version_nonce)
     updated: float = Field(default_factory=time.time)
+
+    @model_validator(mode="after")
+    def _model_validator(self):
+        self.__pydantic_fields_set__ |= {
+            "is_deleted",
+            "version",
+            "version_nonce",
+            "updated",
+        }
 
     def update(self, **kw) -> Self:
         self.version += 1

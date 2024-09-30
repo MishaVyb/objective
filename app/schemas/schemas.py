@@ -162,7 +162,7 @@ class SyncElementsRequest(BaseSchema):
     """Elements to append or/and reconcile with current Scene elements. """
 
 
-class SyncElementsResponse(GetElementsResponse):
+class ReconcileElementsResponse(GetElementsResponse):
     pass
 
 

@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, fields
@@ -242,7 +243,7 @@ class ElementRepository(
             data["_json"] = payload.model_dump(exclude_unset=True)
         return data
 
-    # NOTE  no ORDER BY statement for Elements
+    # NOTE no ORDER BY statement for Elements
     def _use_statement_get_instances_list(
         self,
         filters: FiltersBase | None = None,
@@ -258,7 +259,29 @@ class ElementRepository(
         stm = select(self.model).where(*clauses).filter_by(**filters).options(*options)
         return stm
 
-    async def sync(
+    async def reconcile(
+        self,
+        scene_id: uuid.UUID,
+        payload: schemas.SyncElementsRequest,
+        filters: schemas.ElementsFilters,
+    ):
+        # NOTE
+        # using lock per scene to ensure there no other client updated while
+        # this update is performing, otherwise this client would
+        # loose other client updates as 'next_sync_token' is defined
+        # only after all current update will be handled (not before in order to not
+        # respond with the same elements on next reconcile request)
+        self.app.state.scene_locks.setdefault(scene_id, asyncio.Lock())
+        lock = self.app.state.scene_locks[scene_id]
+        if lock.locked():
+            self.logger.debug("Scene is locked. Wait for release.")
+        async with lock:
+            return schemas.ReconcileElementsResponse.model_construct(
+                items=await self._reconcile(scene_id, payload, filters),
+                next_sync_token=time.time(),
+            )
+
+    async def _reconcile(
         self,
         scene_id: uuid.UUID,
         payload: schemas.SyncElementsRequest,
@@ -266,10 +289,6 @@ class ElementRepository(
     ):
         payload_els = {el.id: el for el in payload.items}
 
-        # ???
-        # - using client 'updated' timestamp, not 'created_at'
-        # - respond with all updated items from prev sync,
-        #   including those that uses just sent himself
         items = await self.db.elements.get_where(
             clauses=[
                 self.model._scene_id == scene_id,
@@ -307,11 +326,11 @@ class ElementRepository(
                 # assuming elements are fully equal
                 continue
 
+            # NOTE
             # 2 clients have made update for the same element
             # - one client update has been stored already
             # - another client change just has come
-
-            # figure out who made last update on client side
+            # - figure out who made last update on client side
             if payload_el.updated < current_el.updated:
                 # extend respond items with element to update on client side
                 respond_els[element_id] = current_el
@@ -324,11 +343,7 @@ class ElementRepository(
             await self.pending_create(el, _scene_id=scene_id)
 
         await self.session.flush()
-        next_sync_token = time.time()
-        return schemas.SyncElementsResponse.model_construct(
-            items=list(respond_els.values()),
-            next_sync_token=next_sync_token,
-        )
+        return list(respond_els.values())
 
     # FIXME typing
     async def pending_update(

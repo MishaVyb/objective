@@ -45,6 +45,7 @@ pyright = "^1.1.344"
 dirty-equals = "^0.8.0"
 debugpy = "^1.8.5"
 aiosqlite = "^0.20.0"
+pytest-xdist = "^3.6.1"
 
 [tool.isort]
 profile = "black"
