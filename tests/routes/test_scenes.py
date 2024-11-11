@@ -390,7 +390,7 @@ async def test_scene_elements_next_sync_token_no_lock_for_get_request(
     SCENE: schemas.SceneExtended,
 ) -> None:
     """
-    Update/Read for one scene happened simultaneity. No lock.
+    Update/Read for one scene happened simultaneously. No lock.
     """
     el = ExcalidrawElement(id="element")
     async with TaskGroup() as group:

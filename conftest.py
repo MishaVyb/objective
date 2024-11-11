@@ -61,7 +61,7 @@ def pytest_runtest_setup(item: pytest.Function):
 
 
 def pytest_assertrepr_compare(
-    config: "Config",
+    config: pytest.Config,
     op: str,
     left: object,
     right: object,

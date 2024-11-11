@@ -236,9 +236,11 @@ class ElementRepository(
     schema = schemas.ElementInternal
 
     def _use_payload(self, payload: schemas.Element | None, **extra_values) -> dict:
+        # HACK Element table does not have these fields:
         extra_values.pop("created_by_id", None)
         extra_values.pop("updated_by_id", None)
         data = super()._use_payload(payload, **extra_values)
+
         if payload:
             data["_json"] = payload.model_dump(exclude_unset=True)
         return data
