@@ -112,7 +112,7 @@ class AppSettings(BaseSettings, VerboseModel):
             self.SERVICE_DIR / "data/scenes/Sicario.objective",
         ]
 
-    LOG_LEVEL: LogLevel = LogLevel.DEBUG
+    LOG_LEVEL: LogLevel = LogLevel.INFO
     LOG_HANDLERS: list[str] = ["console", "file"]
 
     LOG_LEVEL_DOTENV: LogLevel = LogLevel.ERROR
