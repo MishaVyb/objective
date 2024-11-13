@@ -26,7 +26,7 @@ from common.fastapi.monitoring.sentry import (
 )
 from common.fastapi.routes import monitoring
 
-from ..api import v1, v2
+from ..api import v2
 from ..config import AppSettings
 
 if TYPE_CHECKING:
@@ -177,34 +177,15 @@ class ObjectiveAPP(FastAPI):
 
         # setup routes
 
-        # BACKWARDS CAPABILITY
-        _old = APIRouter(prefix=str(settings.API_PREFIX), include_in_schema=False)
-        _old.include_router(v2.users.router)
-        _old.include_router(v1.routes.projects)
-        _old.include_router(v1.routes.scenes)
-        _old.include_router(v1.routes.files)
-
-        _v1 = APIRouter(
-            prefix=str(settings.API_PREFIX / "v1"),
-            generate_unique_id_function=lambda router: f"{router.name}_v1",
-            deprecated=True,
-        )
-        _v1.include_router(v1.routes.projects)
-        _v1.include_router(v1.routes.scenes)
-        _v1.include_router(v1.routes.files)
-
         _v2 = APIRouter(
             prefix=str(settings.API_PREFIX / "v2"),
-            generate_unique_id_function=lambda router: f"{router.name}_v2",
+            generate_unique_id_function=lambda router: router.name,
         )
         _v2.include_router(monitoring.router)
         _v2.include_router(v2.users.router)
         _v2.include_router(v2.routes.projects)
         _v2.include_router(v2.routes.scenes)
         _v2.include_router(v2.routes.files)
-
-        app.include_router(_old)
-        app.include_router(_v1)
         app.include_router(_v2)
 
         # setup openapi at the end after app is fully configured

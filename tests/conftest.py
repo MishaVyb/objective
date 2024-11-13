@@ -226,7 +226,7 @@ async def setup_tokens(setup_users: dict[int, schemas.User], app: FastAPI):
     async with httpx.AsyncClient(app=app, base_url="http://testserver") as session:
         for k, user in TEST_USERS.items():
             response = await session.post(
-                "/api/auth/jwt/login",
+                "/api/v2/auth/jwt/login",
                 data=dict(username=user.email, password="password"),
             )
             assert response.status_code == status.HTTP_200_OK, pformat(response.json())

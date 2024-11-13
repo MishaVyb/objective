@@ -16,7 +16,7 @@ async def test_auth_register(client: ObjectiveClient) -> None:
         "username": "string",
         "role": "string",
     }
-    response = await client._session.post("/api/auth/register", json=data)
+    response = await client._session.post("/api/v2/auth/register", json=data)
     assert response.status_code == status.HTTP_201_CREATED
 
 

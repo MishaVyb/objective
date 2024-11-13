@@ -286,10 +286,13 @@ class ElementRepository(
         # loose other client updates as 'next_sync_token' is defined
         # only after all current update will be handled (not before in order to not
         # respond with the same elements on next reconcile request)
+        # FIXME
+        # implement lock via database (ie SELECT scene FOR UPDATE)
+        # because there are might be several app instances...
         self.app.state.scene_locks.setdefault(scene_id, asyncio.Lock())
         lock = self.app.state.scene_locks[scene_id]
         if lock.locked():
-            self.logger.debug("Scene is locked. Wait for release.")
+            self.logger.warning("Scene is locked. Wait for release.")
         async with lock:
             return schemas.ReconcileElementsResponse.model_construct(
                 items=await self._reconcile(scene_id, payload, filters),

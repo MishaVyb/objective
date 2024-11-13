@@ -23,7 +23,7 @@ def setup_logging(settings: AppSettings) -> None:
 
 def setup_sentry(settings: AppSettings) -> None:
     if settings.SENTRY_DSN:
-        logger.debug("Setup Sentry. Environment: %s", settings.SENTRY_ENVIRONMENT)
+        logger.info("Setup Sentry. Environment: %s", settings.SENTRY_ENVIRONMENT)
         sentry_sdk.init(
             dsn=settings.SENTRY_DSN.get_secret_value(),
             ca_certs=settings.SENTRY_CA_CERTS,

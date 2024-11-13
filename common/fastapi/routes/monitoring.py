@@ -18,12 +18,12 @@ class TestError(Exception):
 async def health_check() -> None:
     """Test service health."""
 
-    logger.debug("Monitoring: health_check")
+    logger.info("Monitoring: health_check")
 
 
 @router.get("/error")
 async def error_check() -> None:
     """Test Sentry errors reporting."""
 
-    logger.debug("Monitoring: error_check")
+    logger.info("Monitoring: error_check")
     raise TestError("Test raise exception report. Not an error. ")
