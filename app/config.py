@@ -43,6 +43,7 @@ class AppSettings(BaseSettings, VerboseModel):
     APP_CORS_SETTINGS: dict = {}
     APP_RAISE_SERVER_EXCEPTIONS: bool | list[int] = False  # for debugging only
     APP_VERBOSE_EXCEPTIONS: bool = True
+    APP_DEBUG_FREEZE: float | None = None
 
     API_PREFIX: URL = "/api"
 

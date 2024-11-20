@@ -25,6 +25,7 @@ from app.main import setup
 from app.repository.models import Base
 from app.repository.repositories import DatabaseRepositories
 from app.schemas import schemas
+from common.config.config import LogLevel
 from tests.helpers import (
     create_and_drop_tables_by_alembic,
     create_and_drop_tables_by_metadata,
@@ -71,6 +72,8 @@ def settings(request: pytest.FixtureRequest) -> AppSettings:
     common: Any = dict(
         # APP_RAISE_SERVER_EXCEPTIONS=[500, 501, 502, 503, 504],
         APP_RAISE_SERVER_EXCEPTIONS=True,
+        LOG_LEVEL=LogLevel.DEBUG,
+        APP_DEBUG_FREEZE=None,
     )
 
     if request.config.option.postgres:

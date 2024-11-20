@@ -21,8 +21,6 @@ pytestmark = [
 
 logger = logging.getLogger("conftest")
 
-_EPOCH = 1_000.0
-
 
 async def test_scene_crud(client: ObjectiveClient) -> None:
     PROJECT = (await client.get_projects()).items[0]

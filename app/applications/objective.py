@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Type
 
 import fastapi.datastructures
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
+from app.dependencies.dependencies import debug_freeze_depends
 from app.schemas import schemas
 from common.fastapi.exceptions import SentryExceptionsHandlers
 from common.fastapi.monitoring.base import JournalRecordMiddleware
@@ -107,6 +108,8 @@ class ObjectiveAPP(FastAPI):
                     dashboard_url=str(settings.SENTRY_DASHBOARD_URL),
                 ),
             ]
+        if settings.APP_DEBUG_FREEZE:
+            app_depends += [Depends(debug_freeze_depends)]
 
         app = cls(
             title=settings.APP_NAME,
@@ -133,9 +136,10 @@ class ObjectiveAPP(FastAPI):
 
         # TODO settings .env
         if settings.APP_ENVIRONMENT == "dev":
+            # NOTE
+            # 'Access-Control-Allow-Origin' header cannot contains multiple values
             origins = [
                 "http://localhost:3000",
-                "http://192.168.1.124:3000",
             ]
 
         elif settings.APP_ENVIRONMENT == "staging":

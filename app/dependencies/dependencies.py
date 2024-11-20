@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Annotated, AsyncGenerator
@@ -6,6 +7,8 @@ import httpx
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
+
+from common.fastapi.monitoring.base import LoggerDepends
 
 if TYPE_CHECKING:
     from app.applications.objective import ObjectiveAPP
@@ -71,3 +74,11 @@ SessionContext = asynccontextmanager(get_database_session)
 #         return NoAuthenticatedUserStab()  # type: ignore
 
 # RequestUserDepends = Annotated[AuthenticatedUser, Depends(get_request_user)]
+
+
+async def debug_freeze_depends(
+    logger: LoggerDepends,
+    settings: AppSettingsDepends,
+) -> None:
+    logger.warning("Debug freeze for %s sec. ", settings.APP_DEBUG_FREEZE)
+    await asyncio.sleep(settings.APP_DEBUG_FREEZE or 0)
