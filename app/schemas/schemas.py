@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Literal
+from enum import StrEnum
+from typing import Annotated
 
 import fastapi_users
 from pydantic import Field
 
-from common.schemas.base import ITEM_PG_ID, BaseSchema, NullValue
+from common.schemas.base import ITEM_PG_ID, BaseSchema
 
 from .base import (
     CreateSchemaMixin,
@@ -86,7 +87,7 @@ class SceneExtended(SceneSimplified):
 
     # Excalidraw:
     elements: list[Element]
-    app_state: AppState = Field(alias="appState")
+    app_state: AppState
 
     # Excalidraw other # UNUSED
     type: str | None = None
@@ -126,20 +127,21 @@ ElementID = Annotated[str, ...]
 
 
 class AppState(BaseSchema, extra="allow"):
-    ...
+    pass
 
 
 class Element(BaseSchema, extra="allow"):
     id: ElementID
-    is_deleted: bool = Field(alias="isDeleted")
+    is_deleted: bool
 
-    # Meta for synchronization
+    # Meta for synchronization:
+
     version: int
     """
     Integer that is sequentially incremented on each change. Used to reconcile
     elements during collaboration or when saving to server.
     """
-    version_nonce: int = Field(alias="versionNonce")
+    version_nonce: int
     """
     Random integer that is regenerated on each change.
     Used for deterministic reconciliation of updates during collaboration,
@@ -148,9 +150,15 @@ class Element(BaseSchema, extra="allow"):
     updated: float
     """Epoch (ms) timestamp of last element update. """
 
-    # Excalidraw Image Element props
-    file_id: str | None = Field(default=None, alias="fileId")
-    status: Literal["pending"] | Literal["saved"] | Literal["error"] | None = None
+    # Excalidraw Image Element props:
+
+    class FileStatus(StrEnum):
+        pending = "pending"
+        saved = "saved"
+        error = "error"
+
+    file_id: str | None = None
+    status: FileStatus | None = None
 
 
 class GetElementsResponse(ItemsResponseBase[Element]):
@@ -193,9 +201,11 @@ class FileCreate(FileExtended, CreateWithIDSchemaMixin):
 
 
 class FiltersBase(BaseSchema):
-    created_by_id: uuid.UUID | Literal["current_user"] | NullValue = Field(
-        default="current_user",
-    )
+    class CreatedBy(StrEnum):
+        current_user = "current_user"
+        any = "*"
+
+    created_by_id: uuid.UUID | CreatedBy = CreatedBy.current_user
     is_deleted: bool | None = None
 
 
@@ -226,7 +236,7 @@ class SceneJsonFilePersistence(BaseSchema, extra="ignore"):
     version: int | None = None
     source: str | None = None
     elements: list = []
-    app_state: dict = Field(default={}, alias="appState")
+    app_state: dict = {}
     files: dict[FileID, FileJsonPersistence]
 
     @property

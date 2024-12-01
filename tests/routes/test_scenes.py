@@ -478,7 +478,7 @@ async def test_scene_filters_project_id(
         IsPartialSchema(created_by_id=USER_B.id),
         IsPartialSchema(created_by_id=USER_B.id),
     ]
-    results = await CLIENT_A.get_scenes(schemas.SceneFilters(created_by_id=""))
+    results = await CLIENT_A.get_scenes(schemas.SceneFilters(created_by_id="*"))
     assert results.items == [
         IsPartialSchema(created_by_id=USER_A.id),
         IsPartialSchema(created_by_id=USER_A.id),
@@ -488,7 +488,7 @@ async def test_scene_filters_project_id(
 
     # per project
     results = await CLIENT_A.get_scenes(
-        schemas.SceneFilters(created_by_id="", project_id=PROJECT_B.id),
+        schemas.SceneFilters(created_by_id="*", project_id=PROJECT_B.id),
     )
     assert results.items == [
         IsPartialSchema(created_by_id=USER_B.id),

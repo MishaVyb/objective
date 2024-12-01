@@ -57,14 +57,10 @@ class ServiceRepositoryBase(
 
         if filters:
 
-            # default filters:
-            if "created_by_id" not in filters.model_fields_set:
-                filters.created_by_id = self.current_user.id
-
             # filters modifications:
-            if filters.created_by_id == "current_user":
+            if filters.created_by_id == schemas.FiltersBase.CreatedBy.current_user:
                 filters.created_by_id = self.current_user.id
-            if filters.created_by_id == "":
+            if filters.created_by_id == schemas.FiltersBase.CreatedBy.any:
                 filters = filters.model_remake(_self_exclude={"created_by_id"})
 
         return super()._use_filters(filters, **extra_filters)
