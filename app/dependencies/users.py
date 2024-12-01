@@ -40,7 +40,7 @@ def get_jwt_strategy(settings: AppSettingsDepends):
 
 fastapi_users_backend = AuthenticationBackend(
     name="jwt",
-    transport=BearerTransport(tokenUrl="auth/jwt/login"),
+    transport=BearerTransport(tokenUrl="v2/auth/jwt/login"),
     get_strategy=get_jwt_strategy,
 )
 fastapi_users_api = FastAPIUsers[models.User, uuid.UUID](
