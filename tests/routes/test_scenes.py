@@ -305,7 +305,7 @@ async def test_scene_elements_crud(
     ]
 
 
-async def test_scene_elements_next_sync_token(
+async def test_scene_elements_next_sync_token_simple(
     CLIENT_A: ObjectiveClient,
     SCENE: schemas.SceneExtended,
 ) -> None:

@@ -5,6 +5,7 @@ import uuid
 
 from sqlalchemy import ForeignKey, PrimaryKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.schemas.schemas import ElementID, FileID
 
@@ -53,7 +54,7 @@ class Element(Base):
 
     # Database only values
     _json: Mapped[dict]  # all element data received from client as it is
-    _updated: Mapped[int] = mapped_column(  # using service _updated ts, not client
+    _updated: Mapped[float] = mapped_column(  # using service _updated ts, not client
         default=lambda: time.time(),
         onupdate=lambda: time.time(),
     )
@@ -65,6 +66,12 @@ class Element(Base):
         #
         PrimaryKeyConstraint(_scene_id, id),
     )
+
+    def __repr__(self):
+        try:
+            return f"<{self.__class__.__name__}({self.id=}, {self._scene_id=}, {self._updated=})>"
+        except DetachedInstanceError:
+            return f"<{self.__class__.__name__}(detached)>"
 
 
 class File(DeclarativeFieldsMixin):

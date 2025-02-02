@@ -259,7 +259,7 @@ class ElementRepository(
 
     async def get(self, scene_id: uuid.UUID, filters: schemas.ElementsFilters):
         next_sync_token = time.time()
-        items: list[schemas.Element] = await self.db.elements.get_where(
+        items: list[schemas.Element] = await self.get_where(
             clauses=[
                 self.model._scene_id == scene_id,
                 self.model._updated > filters.sync_token,
