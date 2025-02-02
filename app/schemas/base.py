@@ -9,10 +9,10 @@ from common.schemas.base import BaseSchema, ModelConstructor
 class DeclarativeFieldsMixin(ModelConstructor):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
 
-    created_by_id: uuid.UUID | None = None
-    updated_by_id: uuid.UUID | None = None
-    created_at: AwareDatetime | None = None
-    updated_at: AwareDatetime | None = None
+    created_by_id: uuid.UUID
+    updated_by_id: uuid.UUID | None
+    created_at: AwareDatetime
+    updated_at: AwareDatetime | None
 
     is_deleted: bool = False
 

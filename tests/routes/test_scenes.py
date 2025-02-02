@@ -214,7 +214,7 @@ async def test_scene_elements_crud(
     ########################################################################################
     # [1] append new els
     ########################################################################################
-
+    initial_scene_updated_at = SCENE.updated_at or SCENE.created_at
     el_3 = ExcalidrawElement(id="element_3")
     el_4 = ExcalidrawElement(id="element_4")
     expected_els = [  # only previous elements which NEW for client
@@ -238,6 +238,10 @@ async def test_scene_elements_crud(
     # request elements after prev sync
     r = await CLIENT.get_els(SCENE.id, sync_token=st)
     assert r.items == []
+
+    scene = await CLIENT.get_scene(SCENE.id)
+    assert scene.updated_at
+    assert scene.updated_at > initial_scene_updated_at
 
     ########################################################################################
     # [2] update els

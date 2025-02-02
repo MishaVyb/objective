@@ -2,6 +2,7 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass, fields
+from datetime import datetime, timezone
 from logging import Logger
 from typing import TYPE_CHECKING, Annotated, Any, Never, Self, Sequence
 from uuid import UUID
@@ -214,6 +215,13 @@ class SceneRepository(
         await self.db.all.flush()
         return await self.get(scene.id, refresh=True)
 
+    async def inform_mutation(self, pk: uuid.UUID) -> None:
+        await self.pending_update(
+            pk,
+            payload=None,
+            updated_at=datetime.now(timezone.utc),
+        )
+
     # TMP easy solution
     async def check_create_rights(self, instance: schemas.SceneExtended):
         if self.current_user.id != instance.project.created_by_id:
@@ -323,6 +331,7 @@ class ElementRepository(
         respond_els = {el.id: el for el in db_els.values() if el.id not in payload_els}
 
         # reconcile existing
+        has_updates = False
         for element_id in merge_els:
             payload_el = payload_els[element_id]
             current_el = db_els[element_id]
@@ -350,11 +359,16 @@ class ElementRepository(
                 respond_els[element_id] = current_el
                 continue
 
+            has_updates = True
             await self.pending_update((scene_id, element_id), payload_el)
 
         # append new
         for el in new_els.values():
+            has_updates = True
             await self.pending_create(el, _scene_id=scene_id)
+
+        if has_updates:
+            await self.db.scenes.inform_mutation(scene_id)
 
         await self.session.flush()
         return list(respond_els.values())
