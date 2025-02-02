@@ -3,7 +3,7 @@ import uuid
 from asyncio import TaskGroup
 
 import pytest
-from dirty_equals import IsDict, IsStr
+from dirty_equals import AnyThing, IsDict, IsStr
 from fastapi import HTTPException, status
 
 from app.client import ObjectiveClient
@@ -30,7 +30,7 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
         name="test-scene",
         project_id=PROJECT.id,
     )
-    TEST_SCENE_FULL = schemas.SceneCreate(
+    TEST_SCENE_FROM_FILE = schemas.SceneCreate(
         name="test-scene",
         elements=[
             ExcalidrawElement(id="1", file_id="file_1", extra_field_value="value"),
@@ -62,7 +62,7 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
 
     # [1.2] create from '.objective' file
     expected = IsPartialSchema(
-        name=TEST_SCENE_FULL.name,
+        name=TEST_SCENE_FROM_FILE.name,
         elements=[
             IsPartialSchema(id="1", extra_field_value="value"),
             IsPartialSchema(id="2", extra_field_value="value"),
@@ -71,10 +71,22 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
         project=IsPartialSchema(id=PROJECT.id),
         # files=[], # files not in response, even if it was provided on creation
     )
-    scene = await client.create_scene(TEST_SCENE_FULL)
+
+    # getting scene by direct request
+    scene = await client.create_scene(TEST_SCENE_FROM_FILE)
     assert scene == expected
     scene = await client.get_scene(scene.id)
     assert scene == expected
+
+    # getting scene from project request
+    project = (await client.get_projects()).items[0]
+    assert project.scenes[-1] == IsPartialSchema(
+        name=TEST_SCENE_FROM_FILE.name,
+        app_state=IsPartialSchema(extra_field_value="value"),
+        type=AnyThing,
+        version=AnyThing,
+        source=AnyThing,
+    )
 
     # getting files by separate requests
     result = [

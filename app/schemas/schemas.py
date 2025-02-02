@@ -79,20 +79,17 @@ class GetProjectsResponse(ItemsResponseBase[Project]):
 
 class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     name: str
-
-
-class SceneExtended(SceneSimplified):
-    # relations:
-    project: ProjectSimplified
-
-    # Excalidraw:
-    elements: list[Element]
     app_state: AppState
 
-    # Excalidraw other # UNUSED
+    # Excalidraw extra # UNUSED
     type: str | None = None
     version: int | None = None
     source: str | None = None
+
+
+class SceneExtended(SceneSimplified):
+    project: ProjectSimplified
+    elements: list[Element]
 
 
 class SceneCreate(
@@ -127,7 +124,12 @@ ElementID = Annotated[str, ...]
 
 
 class AppState(BaseSchema, extra="allow"):
-    pass
+    """
+    Partial Excalidraw app state.
+
+    :see clearAppStateForDatabase: `objective-f` implements `clearAppStateForDatabase`.
+    :note name: `AppState.name` is deprecated and `Scene.name` should be used instead.
+    """
 
 
 class Element(BaseSchema, extra="allow"):
