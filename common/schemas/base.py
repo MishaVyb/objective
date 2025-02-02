@@ -28,6 +28,7 @@ class BaseSchema(ModelConstructor):
         populate_by_name=True,
         alias_generator=to_camel,
         use_attribute_docstrings=True,
+        json_schema_serialization_defaults_required=True,
     )
 
     def __str__(self) -> str:
