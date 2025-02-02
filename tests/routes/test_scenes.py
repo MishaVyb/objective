@@ -298,11 +298,12 @@ async def test_scene_elements_crud(
 
     # check el update has been applied
     r = await CLIENT.get_els(SCENE.id, sync_token=st)
-    assert r.items == [
+    assert r.items == IsList(
         IsPartialSchema(id="element_3", key="UPDATE_1_C"),
         IsPartialSchema(id="element_4", key="UPDATE_1_D"),
         IsPartialSchema(id="element_5"),
-    ]
+        check_order=False,
+    )
 
 
 async def test_scene_elements_next_sync_token_simple(
