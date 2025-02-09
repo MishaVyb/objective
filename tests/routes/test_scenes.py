@@ -146,7 +146,7 @@ async def test_scene_copy(
     ANOTHER_USER_SCENE = (await CLIENT_A.get_scenes()).items[0]
 
     # [1] copy
-    payload = schemas.SceneUpdate(name="copy")
+    payload = schemas.SceneCopy(name="copy")
     result = await CLIENT_B.copy_scene(SCENE.id, payload)
     assert result.id != SCENE.id
     assert result == IsPartialSchema(
@@ -156,7 +156,7 @@ async def test_scene_copy(
     )
 
     # [2] copy and move
-    payload = schemas.SceneUpdate(name="copy", project_id=ANOTHER_PROJECT.id)
+    payload = schemas.SceneCopy(name="copy", project_id=ANOTHER_PROJECT.id)
     result = await CLIENT_B.copy_scene(SCENE.id, payload)
     assert result.id != SCENE.id
     assert result == IsPartialSchema(
@@ -166,7 +166,7 @@ async def test_scene_copy(
     )
 
     # [3] copy another User scene to self project
-    payload = schemas.SceneUpdate(name="copy", project_id=PROJECT.id)
+    payload = schemas.SceneCopy(name="copy", project_id=PROJECT.id)
     result = await CLIENT_B.copy_scene(ANOTHER_USER_SCENE.id, payload)
     assert result.id != SCENE.id
     assert result == IsPartialSchema(
@@ -430,16 +430,61 @@ async def test_scene_elements_next_sync_token_no_lock_for_get_request(
 
 
 async def test_files_crud(client: ObjectiveClient) -> None:
-    # NOTE
-    # - files could be created via Scene create/copy, that tested above
-    # - and files could be created directly
+    """
+    Files:
+     - files could be created via Scene create that tested above
+     (on scene copy files are not created, already existing files are used)
+     - and files could be created directly
+    """
+    PROJECT = (await client.get_projects()).items[0]
+    SCENE = (await client.get_scenes()).items[0]
 
-    payload = schemas.FileCreate(id="file_1", data="data_1", type="image/png")
+    payload = schemas.FileCreate(
+        id="file_1",
+        data="data_1",
+        type="image/png",
+        kind=schemas.FileKind.THUMBNAIL,
+    )
     assert await client.create_file(payload) == IsPartialSchema(id="file_1")
     assert await client.get_file("file_1") == IsPartialSchema(payload)
 
-    # create the same file twice -- ok
-    assert await client.create_file(payload) == IsPartialSchema(id="file_1")
+    # associate file with scene
+    await client.update_scene(SCENE.id, schemas.SceneUpdate(files=["file_1"]))
+
+    # create another file
+    payload = schemas.FileCreate(
+        id="file_2",
+        data="data_2",
+        type="image/png",
+        kind=schemas.FileKind.THUMBNAIL,
+    )
+    assert await client.create_file(payload) == IsPartialSchema(id="file_2")
+    assert await client.get_file("file_2") == IsPartialSchema(payload)
+
+    # associate file with scene again
+    await client.update_scene(SCENE.id, schemas.SceneUpdate(files=["file_1", "file_2"]))
+
+    # all files (simplified) accessible through projects
+    project = (await client.get_projects()).items[0]
+    assert project.scenes[0].files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+        IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
+    ]
+
+    # create the same file twice, but with another kind
+    # (for example user upload thumbnail image to the canvas)
+    payload = payload.model_remake(kind=schemas.FileKind.IMAGE)
+    assert await client.create_file(payload) == IsPartialSchema(
+        id="file_2",
+        kind=schemas.FileKind.THUMBNAIL,  # !!! it's still thumbnail
+    )
+
+    # copied scene has the same files association
+    copied_scene = await client.copy_scene(SCENE.id, schemas.SceneCopy())
+    assert (await client.get_scene(copied_scene.id)).files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+        IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
+    ]
 
 
 async def test_scene_filters_is_deleted(client: ObjectiveClient) -> None:

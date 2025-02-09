@@ -21,3 +21,8 @@ class ElementInternal(Element):
         if isinstance(obj, models.Element):
             return obj._json
         return obj
+
+
+class FileToSceneInternal(BaseSchema):
+    file_id: FileID
+    scene_id: uuid.UUID

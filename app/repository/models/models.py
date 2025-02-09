@@ -3,10 +3,11 @@ from __future__ import annotations
 import time
 import uuid
 
-from sqlalchemy import ForeignKey, PrimaryKeyConstraint
+from sqlalchemy import ForeignKey, PrimaryKeyConstraint, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.orm.exc import DetachedInstanceError
 
+from app.repository import schemas
 from app.schemas.schemas import ElementID, FileID
 
 from .base import Base, DeclarativeFieldsMixin
@@ -30,15 +31,21 @@ class Scene(DeclarativeFieldsMixin):
     # objective scene meta info
     name: Mapped[str]
 
+    files: Mapped[list[File]] = relationship(
+        secondary=lambda: FileToSceneAssociation.__table__,
+        # primaryjoin=UserToEventComposedAssociation.user_id == id,
+        # secondaryjoin=UserToEventComposedAssociation.event_id == EventComposed.id,
+        viewonly=True,
+        order_by=lambda: FileToSceneAssociation.id,
+    )
+
     # excalidraw scene data:
     type: Mapped[str | None]
     version: Mapped[int | None]
     source: Mapped[str | None]  # app url
 
     app_state: Mapped[dict] = mapped_column(default={})
-    elements: Mapped[list[Element]] = relationship(
-        # ??? only not deleted elements for first initial scene loading...
-    )
+    elements: Mapped[list[Element]] = relationship()
 
 
 class Element(Base):
@@ -78,6 +85,25 @@ class File(DeclarativeFieldsMixin):
     id: Mapped[FileID] = mapped_column(primary_key=True, index=True, unique=True)
     type: Mapped[str]
     data: Mapped[str]  # VARCHAR ~ Postgres TEXT -- unlimited length (but up to 1gb)
+
+    # objective props:
+    kind: Mapped[str] = mapped_column(server_default=schemas.FileKind.IMAGE)
+    width: Mapped[float | None]
+    height: Mapped[float | None]
+
+
+class FileToSceneAssociation(DeclarativeFieldsMixin):
+
+    scene_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(Scene.id, ondelete="CASCADE"),
+        index=True,
+    )
+    file_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(File.id, ondelete="CASCADE"),
+        index=True,
+    )
+
+    __table_args__ = (UniqueConstraint(scene_id, file_id),)
 
 
 # Postponed relations definition

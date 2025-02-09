@@ -81,6 +81,15 @@ class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     name: str
     app_state: AppState
 
+    # relations:
+    files: list[FileSimplified] = Field(
+        description=(
+            f"Files that manually associated with that scene (i.e. `thumbnail`, `render`). "
+            "User's image files have not direct association with the scene, "
+            "but it cant be found through scene elements by `element.file_id`. "
+        ),
+    )
+
     # Excalidraw extra # UNUSED
     type: str | None = None
     version: int | None = None
@@ -108,7 +117,12 @@ class SceneUpdate(
     optional=SceneCreate.model_fields,
     exclude={"project", "elements"},
 ):
+    files: list[FileID] | None = None  # update files (thumbnails/renders)
     project_id: ITEM_PG_ID | None = None  # move scene to another project
+
+
+class SceneCopy(SceneUpdate, exclude={"files"}):
+    pass
 
 
 class GetScenesResponse(ItemsResponseBase[SceneExtended]):
@@ -184,9 +198,20 @@ FileID = Annotated[str, ...]
 """File id length equals 40 to align with the HEX length of SHA-1 (which is 160 bit). """
 
 
+class FileKind(StrEnum):
+    IMAGE = "image"
+    THUMBNAIL = "thumbnail"
+    RENDER = "render"
+
+
 class FileSimplified(BaseSchema, DeclarativeFieldsMixin):
     id: FileID
     type: str = Field(alias="mimeType")
+
+    # objective props:
+    kind: FileKind = FileKind.IMAGE
+    width: float | None = None
+    height: float | None = None
 
 
 class FileExtended(FileSimplified):

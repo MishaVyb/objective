@@ -17,7 +17,7 @@ from typing_extensions import deprecated
 from app.config import AppSettings
 from app.repository.users import UserRepository
 from app.schemas.schemas import FiltersBase
-from common.fastapi.exceptions.exceptions import NotEnoughRights
+from common.fastapi.exceptions.exceptions import NotEnoughRights, NotFoundError
 from common.repo.sqlalchemy import (
     _CLASS_DEFAULT,
     CommonSQLAlchemyRepository,
@@ -130,7 +130,12 @@ class ProjectRepository(
 
     class Loading(ServiceRepositoryBase.Loading):
         default = [
-            selectinload(models.Project.scenes),
+            selectinload(models.Project.scenes)
+            .selectinload(models.Scene.files)
+            .load_only(
+                *models.File.columns_depending_on(schemas.FileSimplified),
+                raiseload=True,
+            ),
         ]
 
     # DEPRECATED
@@ -189,7 +194,11 @@ class SceneRepository(
     class Loading(ServiceRepositoryBase.Loading):
         default = [
             joinedload(models.Scene.project),
-            selectinload(models.Scene.elements),
+            selectinload(models.Scene.elements),  # ??? REMOVE ELEMENT FROM HERE
+            selectinload(models.Scene.files).load_only(
+                *models.File.columns_depending_on(schemas.FileSimplified),
+                raiseload=True,
+            ),
         ]
 
     async def create(
@@ -214,6 +223,31 @@ class SceneRepository(
 
         await self.db.all.flush()
         return await self.get(scene.id, refresh=True)
+
+    async def update(
+        self,
+        pk: UUID,
+        payload: schemas.SceneUpdate | None = None,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        flush: bool = False,
+        refresh: bool = False,
+        **extra_values,
+    ) -> schemas.SceneExtendedInternal:
+        instance = await super().update(
+            pk, payload, options, flush, refresh, **extra_values
+        )
+
+        # handle relationship
+        if payload and payload.files is not None:
+            await self.db.files_to_scenes.delete_by(scene_id=instance.id)
+            for file_id in payload.files:
+                if not await self.db.files.exist_where(id=file_id):
+                    raise NotFoundError(f"File does not exist: {file_id}")
+                await self.db.files_to_scenes.pending_create(
+                    schemas.FileToSceneInternal(file_id=file_id, scene_id=instance.id),
+                )
+
+        return instance
 
     async def inform_mutation(self, pk: uuid.UUID) -> None:
         await self.pending_update(
@@ -392,6 +426,18 @@ class FileRepository(
     schema = schemas.FileExtended
 
 
+class FileToSceneRepository(
+    ServiceRepositoryBase[
+        models.FileToSceneAssociation,
+        schemas.FileToSceneInternal,
+        schemas.FileToSceneInternal,
+        Never,
+    ],
+):
+    model = models.FileToSceneAssociation
+    schema = schemas.FileToSceneInternal
+
+
 @dataclass(kw_only=True)
 class DatabaseRepositories:
     all: Annotated[CommonSQLAlchemyRepository, Depends()]
@@ -400,6 +446,7 @@ class DatabaseRepositories:
     scenes: Annotated[SceneRepository, Depends()]
     elements: Annotated[ElementRepository, Depends()]
     files: Annotated[FileRepository, Depends()]
+    files_to_scenes: Annotated[FileToSceneRepository, Depends()]
 
     users: Annotated[UserRepository, Depends()]
 

@@ -115,22 +115,26 @@ async def copy_scene(
     db: DatabaseRepositoriesDepends,
     *,
     scene_id: UUID,
-    payload: schemas.SceneUpdate,  # overrides
-    logger: LoggerDepends,
+    payload: schemas.SceneCopy,  # overrides
 ) -> schemas.SceneExtended:
     """Duplicate scene. Supports overrides."""
     original = await db.scenes.get(scene_id)
+    payload.project_id = payload.project_id or original.project.id
 
-    # merge original values and payload update
-    values = original.model_dump() | payload.model_dump(
-        exclude_unset=True,
-        exclude={"project_id"},
-    )
     p = schemas.SceneCreate.model_build(
-        **values,
-        project_id=payload.project_id or original.project.id,
+        original,
+        **payload.model_dump(exclude_unset=True),
+        _payload_exclude={"files"},
     )
-    return await db.scenes.create(p, refresh=True)
+    scene = await db.scenes.create(p, refresh=True)
+
+    # associate the same files with new scene
+    scene = await db.scenes.update(
+        scene.id,
+        schemas.SceneUpdate(files=[file.id for file in original.files]),
+    )
+
+    return scene
 
 
 @scenes.patch("/{scene_id}", status_code=status.HTTP_200_OK)
@@ -208,7 +212,12 @@ async def create_file(
     payload: schemas.FileCreate,
 ) -> schemas.FileSimplified:
 
-    # suppress error for multiply requests with the same file from frontend
+    # the same file might be created many times
+    # - when user upload the same image again
+    # - when scene is duplicated (copied), its ExcalidrawImageElements has the same file_id
+    #  and its render files (i.e. thumbnail, etc) has the same file_id
+    # - when user add thumbnail/render file directly to the scene canvas
+    # (in that case we do not change file kind)
     if file := await db.files.get_one_or_none(id=payload.id):
         logger.warning("Duplicate file id: %s. File already exist. ", file.id)
         return file
