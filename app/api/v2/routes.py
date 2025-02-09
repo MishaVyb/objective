@@ -129,7 +129,8 @@ async def copy_scene(
     scene = await db.scenes.create(p, refresh=True)
 
     # associate the same files with new scene
-    scene = await db.scenes.update(
+    scene.files = original.files
+    await db.scenes_simplified.update(
         scene.id,
         schemas.SceneUpdate(files=[file.id for file in original.files]),
     )
@@ -143,8 +144,8 @@ async def update_scene(
     db: DatabaseRepositoriesDepends,
     *,
     payload: schemas.SceneUpdate,
-) -> schemas.SceneExtended:
-    return await db.scenes.update(scene_id, payload, refresh=True)
+) -> schemas.SceneWithProject:
+    return await db.scenes_simplified.update(scene_id, payload, refresh=True)
 
 
 @scenes.delete("/{scene_id}", status_code=status.HTTP_200_OK)
@@ -154,7 +155,7 @@ async def delete_scene(
     scene_id: UUID,
 ) -> schemas.SceneSimplified:
     """Mark as deleted."""
-    return await db.scenes.update(scene_id, is_deleted=True)
+    return await db.scenes_simplified.update(scene_id, is_deleted=True)
 
 
 ########################################################################################

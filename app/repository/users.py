@@ -26,10 +26,6 @@ class UserRepository(SQLAlchemyUserDatabase[models.User, uuid.UUID]):
     def __init__(self, session: SessionDepends):
         super().__init__(session, self.model)
 
-    @property
-    def current_user(self) -> AuthenticatedUser:
-        return self.request.state.current_user
-
     # override to using 'flush' instead of 'commit':
 
     async def create(self, create_dict: dict) -> models.User:

@@ -96,8 +96,13 @@ class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     source: str | None = None
 
 
-class SceneExtended(SceneSimplified):
+class SceneWithProject(SceneSimplified):
     project: ProjectSimplified
+
+
+class SceneExtended(SceneWithProject):
+    """Scene with project and elements."""
+
     elements: list[Element]
 
 

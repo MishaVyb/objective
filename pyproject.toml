@@ -113,8 +113,11 @@ enable_error_code = [
 
 [tool.pytest.ini_options]
 addopts = "--failed-first --durations=10 --disable-warnings --show-capture=no"
-# filterwarnings = [
-#     "error",
-#     "ignore::DeprecationWarning",
-#     "ignore:.*unclosed.*:ResourceWarning",
-# ]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+
+    # triggers sometime because of many workers pytest-dist session run:
+    "ignore::ResourceWarning",
+    "ignore::pluggy.PluggyTeardownRaisedWarning",
+]

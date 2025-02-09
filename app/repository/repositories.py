@@ -89,7 +89,7 @@ class ServiceRepositoryBase(
         instance = await super().update(
             pk, payload, options, flush, refresh, **extra_values
         )
-        await self.check_update_rights(instance)
+        await self.check_update_rights(instance, payload)
         return instance
 
     # TODO check access rights
@@ -112,7 +112,11 @@ class ServiceRepositoryBase(
     async def check_create_rights(self, instance: _SchemaType):
         pass
 
-    async def check_update_rights(self, instance: _SchemaType):
+    async def check_update_rights(
+        self,
+        instance: _SchemaType,
+        payload: _UpdateSchemaType | None,
+    ):
         if self.current_user.id != instance.created_by_id:  # type: ignore
             raise NotEnoughRights(f"Not enough rights to update: {instance}")
 
@@ -185,7 +189,7 @@ class SceneRepository(
         models.Scene,
         schemas.SceneExtendedInternal,
         schemas.SceneCreate,
-        schemas.SceneUpdate,
+        Never,
     ],
 ):
     model = models.Scene
@@ -194,7 +198,7 @@ class SceneRepository(
     class Loading(ServiceRepositoryBase.Loading):
         default = [
             joinedload(models.Scene.project),
-            selectinload(models.Scene.elements),  # ??? REMOVE ELEMENT FROM HERE
+            selectinload(models.Scene.elements),
             selectinload(models.Scene.files).load_only(
                 *models.File.columns_depending_on(schemas.FileSimplified),
                 raiseload=True,
@@ -226,13 +230,53 @@ class SceneRepository(
 
     async def update(
         self,
+        pk,
+        payload=None,
+        options=_CLASS_DEFAULT,
+        flush=False,
+        refresh=False,
+        **extra_values,
+    ):
+        raise NotImplementedError(f"{SceneSimplifiedRepository} should be used. ")
+
+    # TMP easy solution
+    async def check_create_rights(self, instance: schemas.SceneExtended):
+        if self.current_user.id != instance.project.created_by_id:
+            raise NotEnoughRights(f"Not enough rights to update: {instance.project}")
+
+
+class SceneSimplifiedRepository(
+    ServiceRepositoryBase[
+        models.Scene,
+        schemas.SceneWithProject,
+        Never,
+        schemas.SceneUpdate,
+    ],
+):
+    """Scene repository without loading Elements. Is's used for UPDATE action."""
+
+    model = models.Scene
+    schema = schemas.SceneWithProject
+
+    class Loading(ServiceRepositoryBase.Loading):
+        default = [
+            # no elements loading
+            joinedload(models.Scene.project),
+            selectinload(models.Scene.files).load_only(
+                *models.File.columns_depending_on(schemas.FileSimplified),
+                raiseload=True,
+            ),
+        ]
+
+    async def update(
+        self,
         pk: UUID,
         payload: schemas.SceneUpdate | None = None,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         flush: bool = False,
         refresh: bool = False,
         **extra_values,
-    ) -> schemas.SceneExtendedInternal:
+    ) -> schemas.SceneWithProject:
         instance = await super().update(
             pk, payload, options, flush, refresh, **extra_values
         )
@@ -257,7 +301,11 @@ class SceneRepository(
         )
 
     # TMP easy solution
-    async def check_create_rights(self, instance: schemas.SceneExtended):
+    async def check_update_rights(
+        self,
+        instance: schemas.SceneExtended,
+        payload: schemas.SceneUpdate,
+    ):
         if self.current_user.id != instance.project.created_by_id:
             raise NotEnoughRights(f"Not enough rights to update: {instance.project}")
 
@@ -402,7 +450,7 @@ class ElementRepository(
             await self.pending_create(el, _scene_id=scene_id)
 
         if has_updates:
-            await self.db.scenes.inform_mutation(scene_id)
+            await self.db.scenes_simplified.inform_mutation(scene_id)
 
         await self.session.flush()
         return list(respond_els.values())
@@ -444,6 +492,7 @@ class DatabaseRepositories:
 
     projects: Annotated[ProjectRepository, Depends()]
     scenes: Annotated[SceneRepository, Depends()]
+    scenes_simplified: Annotated[SceneSimplifiedRepository, Depends()]
     elements: Annotated[ElementRepository, Depends()]
     files: Annotated[FileRepository, Depends()]
     files_to_scenes: Annotated[FileToSceneRepository, Depends()]

@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from app.client import ObjectiveClient
 from app.exceptions import NotFoundInstanceError
 from app.schemas import schemas
-from common.fastapi.exceptions.exceptions import NotEnoughRights
+from common.fastapi.exceptions.exceptions import NotEnoughRights, NotFoundError
 from tests.conftest_data import ExcalidrawElement
 from tests.helpers import IsList, IsPartialSchema
 from tests.routes.test_projects import TEST_PROJECT
@@ -117,14 +117,14 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
         project=IsPartialSchema(id=ANOTHER_PROJECT.id),
         # AppState was fully replaced:
         app_state=IsDict(new_key="new_value"),
-        # elements was not updated:
-        elements=[
-            IsPartialSchema(id="1", extra_field_value="value"),
-            IsPartialSchema(id="2", extra_field_value="value"),
-        ],
     )
     assert await client.update_scene(scene.id, payload) == expected
     assert await client.get_scene(scene.id) == expected
+    assert (await client.get_scene(scene.id)).elements == [
+        # elements was not updated:
+        IsPartialSchema(id="1", extra_field_value="value"),
+        IsPartialSchema(id="2", extra_field_value="value"),
+    ]
 
     # [3] delete
     result = await client.delete_scene(scene.id)
@@ -486,6 +486,13 @@ async def test_files_crud(client: ObjectiveClient) -> None:
         IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
     ]
 
+    # raises 404
+    with pytest.raises(NotFoundError):
+        await client.update_scene(
+            SCENE.id,
+            schemas.SceneUpdate(files=["invalid_file_id"]),
+        )
+
 
 async def test_scene_filters_is_deleted(client: ObjectiveClient) -> None:
     # arrange:
@@ -590,9 +597,14 @@ async def test_scene_access_rights(
         await CLIENT_A.create_scene(payload)
 
     # copy self scene to another user project
-    payload = schemas.SceneUpdate(name="copy", project_id=PROJECT_B.id)
+    payload = schemas.SceneCopy(name="copy", project_id=PROJECT_B.id)
     with pytest.raises(NotEnoughRights):
         await CLIENT_A.copy_scene(PROJECT_A.scenes[0].id, payload)
+
+    # move self scene to another user project
+    payload = schemas.SceneUpdate(project_id=PROJECT_B.id)
+    with pytest.raises(NotEnoughRights):
+        await CLIENT_A.update_scene(PROJECT_A.scenes[0].id, payload)
 
     # sync elements
     # TODO

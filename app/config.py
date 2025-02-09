@@ -85,8 +85,14 @@ class AppSettings(BaseSettings, VerboseModel):
     def DATABASE_URL(self):
         return sqlalchemy.URL.create(
             drivername=self.DATABASE_DRIVER,
-            username=self.DATABASE_USER.get_secret_value() or None,
-            password=self.DATABASE_PASSWORD.get_secret_value() or None,
+            username=(
+                self.DATABASE_USER.get_secret_value() if self.DATABASE_USER else None
+            ),
+            password=(
+                self.DATABASE_PASSWORD.get_secret_value()
+                if self.DATABASE_PASSWORD
+                else None
+            ),
             host=self.DATABASE_HOST,
             port=self.DATABASE_PORT,
             database=self.DATABASE_NAME,

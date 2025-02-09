@@ -116,12 +116,12 @@ class ObjectiveClient(HTTPXClientBase):
         self,
         id: UUID,
         payload: schemas.SceneUpdate,
-    ) -> schemas.SceneExtended:
+    ) -> schemas.SceneWithProject:
         return await self._call_service(
             HTTPMethod.PATCH,
             f"/scenes/{id}",
             payload=payload,
-            response_schema=schemas.SceneExtended,
+            response_schema=schemas.SceneWithProject,
         )
 
     async def delete_scene(self, id: UUID) -> schemas.SceneSimplified:

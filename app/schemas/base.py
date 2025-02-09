@@ -1,9 +1,13 @@
 import uuid
+import warnings
 from typing import Generic, TypeVar
 
 from pydantic import AwareDatetime, Field
 
 from common.schemas.base import BaseSchema, ModelConstructor
+
+# enable pydantic warning as error to not miss type mismatch
+warnings.filterwarnings("error", r"Pydantic serializer warnings")
 
 
 class DeclarativeFieldsMixin(ModelConstructor):
