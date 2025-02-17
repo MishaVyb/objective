@@ -283,7 +283,16 @@ class SceneSimplifiedRepository(
 
         # handle relationship
         if payload and payload.files is not None:
+
+            # delete many-to-many association
             await self.db.files_to_scenes.delete_by(scene_id=instance.id)
+
+            # delete render file itself
+            for render in instance.files:
+                if render.id not in payload.files:
+                    await self.db.files.delete(render.id)  # type: ignore
+
+            # creating new
             for file_id in payload.files:
                 if not await self.db.files.exist_where(id=file_id):
                     raise NotFoundError(f"File does not exist: {file_id}")
@@ -294,9 +303,10 @@ class SceneSimplifiedRepository(
         return instance
 
     async def inform_mutation(self, pk: uuid.UUID) -> None:
-        await self.pending_update(
+        await self.update(
             pk,
-            payload=None,
+            # remove render, as they are not actual anymore:
+            schemas.SceneUpdate(files=[]),
             updated_at=datetime.now(timezone.utc),
         )
 

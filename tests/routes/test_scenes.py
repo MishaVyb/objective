@@ -30,21 +30,8 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
         name="test-scene",
         project_id=PROJECT.id,
     )
-    TEST_SCENE_FROM_FILE = schemas.SceneCreate(
-        name="test-scene",
-        elements=[
-            ExcalidrawElement(id="1", file_id="file_1", extra_field_value="value"),
-            ExcalidrawElement(id="2", file_id="file_2", extra_field_value="value"),
-        ],
-        app_state=schemas.AppState(extra_field_value="value"),
-        files=[
-            schemas.FileCreate(id="file_1", data="data_1", type="image/png"),
-            schemas.FileCreate(id="file_2", data="data_2", type="image/png"),
-        ],
-        project_id=PROJECT.id,
-    )
 
-    # [1] create
+    # [1] create simple
     expected = IsPartialSchema(
         name=TEST_SCENE.name,
     )
@@ -61,6 +48,20 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
     ]
 
     # [1.2] create from '.objective' file
+    TEST_SCENE_FROM_FILE = schemas.SceneCreate(
+        name="test-scene",
+        elements=[
+            ExcalidrawElement(id="1", file_id="file_1", extra_field_value="value"),
+            ExcalidrawElement(id="2", file_id="file_2", extra_field_value="value"),
+        ],
+        app_state=schemas.AppState(extra_field_value="value"),
+        files=[
+            # !!! user's images, not scene's renders
+            schemas.FileCreate(id="file_1", data="data_1", type="image/png"),
+            schemas.FileCreate(id="file_2", data="data_2", type="image/png"),
+        ],
+        project_id=PROJECT.id,
+    )
     expected = IsPartialSchema(
         name=TEST_SCENE_FROM_FILE.name,
         elements=[
@@ -69,7 +70,7 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
         ],
         app_state=IsPartialSchema(extra_field_value="value"),
         project=IsPartialSchema(id=PROJECT.id),
-        # files=[], # files not in response, even if it was provided on creation
+        files=[],  # !!! empty, because scene renders have not been created yet
     )
 
     # getting scene by direct request
@@ -492,6 +493,14 @@ async def test_files_crud(client: ObjectiveClient) -> None:
             SCENE.id,
             schemas.SceneUpdate(files=["invalid_file_id"]),
         )
+
+    # make changes to scene.elements, expecting scene.files invalidation
+    await client.reconcile_els(
+        SCENE.id,
+        schemas.SyncElementsRequest(items=[ExcalidrawElement(id="element_1")]),
+    )
+    project = (await client.get_projects()).items[0]
+    assert project.scenes[0].files == []
 
 
 async def test_scene_filters_is_deleted(client: ObjectiveClient) -> None:

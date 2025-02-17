@@ -84,11 +84,12 @@ class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
     # relations:
     files: list[FileSimplified] = Field(
         description=(
-            f"Files that manually associated with that scene (i.e. `thumbnail`, `render`). "
+            f"Files that manually associated with that scene (i.e. `thumbnail`, `export`). "
             "User's image files have not direct association with the scene, "
             "but it cant be found through scene elements by `element.file_id`. "
         ),
     )
+    """Scene's `renders` (not user's `images`). """
 
     # Excalidraw extra # UNUSED
     type: str | None = None
@@ -112,7 +113,8 @@ class SceneCreate(
     exclude={"project"},
     optional={"elements", "app_state"},
 ):
-    files: list[FileCreate] = []  # for creating scenes from '.objective' file
+    files: list[FileCreate] = []
+    """User's `images` (not `renders`). It's required for creating scenes from '.objective' file. """
     project_id: ITEM_PG_ID
 
 
@@ -122,7 +124,7 @@ class SceneUpdate(
     optional=SceneCreate.model_fields,
     exclude={"project", "elements"},
 ):
-    files: list[FileID] | None = None  # update files (thumbnails/renders)
+    files: list[FileID] | None = None  # update files (thumbnails/exports)
     project_id: ITEM_PG_ID | None = None  # move scene to another project
 
 
