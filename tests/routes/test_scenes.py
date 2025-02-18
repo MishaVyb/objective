@@ -450,7 +450,10 @@ async def test_files_crud(client: ObjectiveClient) -> None:
     assert await client.get_file("file_1") == IsPartialSchema(payload)
 
     # associate file with scene
-    await client.update_scene(SCENE.id, schemas.SceneUpdate(files=["file_1"]))
+    scene = await client.update_scene(SCENE.id, schemas.SceneUpdate(files=["file_1"]))
+    assert scene.files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+    ]
 
     # create another file
     payload = schemas.FileCreate(
@@ -463,7 +466,14 @@ async def test_files_crud(client: ObjectiveClient) -> None:
     assert await client.get_file("file_2") == IsPartialSchema(payload)
 
     # associate file with scene again
-    await client.update_scene(SCENE.id, schemas.SceneUpdate(files=["file_1", "file_2"]))
+    scene = await client.update_scene(
+        SCENE.id,
+        schemas.SceneUpdate(files=["file_1", "file_2"]),
+    )
+    assert scene.files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+        IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
+    ]
 
     # all files (simplified) accessible through projects
     project = (await client.get_projects()).items[0]
@@ -482,6 +492,11 @@ async def test_files_crud(client: ObjectiveClient) -> None:
 
     # copied scene has the same files association
     copied_scene = await client.copy_scene(SCENE.id, schemas.SceneCopy())
+    assert copied_scene.files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+        IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
+    ]
+
     assert (await client.get_scene(copied_scene.id)).files == [
         IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
         IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),

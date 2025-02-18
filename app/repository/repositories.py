@@ -300,7 +300,7 @@ class SceneSimplifiedRepository(
                     schemas.FileToSceneInternal(file_id=file_id, scene_id=instance.id),
                 )
 
-        return instance
+        return await self.get(pk, refresh=True)
 
     async def inform_mutation(self, pk: uuid.UUID) -> None:
         await self.update(
