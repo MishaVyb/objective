@@ -15,9 +15,19 @@ async def test_auth_register(client: ObjectiveClient) -> None:
         "password": "string",
         "username": "string",
         "role": "string",
+        #
+        # omitted fields:
+        "is_superuser": True,
+        "is_verified": True,
     }
     response = await client._session.post("/api/v2/auth/register", json=data)
     assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["email"] == "user@example.com"
+
+    # omitted fields:
+    # (these fields can be set only at db directly)
+    assert response.json()["isSuperuser"] is False
+    assert response.json()["isVerified"] is False
 
 
 async def test_users_me(client: ObjectiveClient) -> None:

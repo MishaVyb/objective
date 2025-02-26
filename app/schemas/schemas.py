@@ -7,22 +7,26 @@ from typing import Annotated
 import fastapi_users
 from pydantic import Field
 
-from common.schemas.base import ITEM_PG_ID, BaseSchema
+from common.schemas.base import ITEM_PG_ID, SchemaBase
 
 from .base import (
-    CreateSchemaMixin,
-    CreateWithIDSchemaMixin,
-    DeclarativeFieldsMixin,
+    Access,
+    CreateSchemaBase,
+    CreateWithIDSchemaBase,
+    DeclarativeSchemaBase,
+    EntityMixin,
     ItemsResponseBase,
-    UpdateSchemaMixin,
+    UpdateSchemaBase,
 )
+
+Access  # autoflake
 
 ########################################################################################
 # users
 ########################################################################################
 
 
-class _UserFieldsMixin(BaseSchema):
+class _UserFieldsMixin(SchemaBase):
     username: str | None = None
     role: str | None = None
 
@@ -44,24 +48,24 @@ class UserUpdate(fastapi_users.schemas.BaseUserUpdate, _UserFieldsMixin):
 ########################################################################################
 
 
-class Project(BaseSchema, DeclarativeFieldsMixin):
+class Project(EntityMixin):
     name: str
 
     # relations
     scenes: list[SceneSimplified]
 
 
-class ProjectSimplified(Project, DeclarativeFieldsMixin, exclude={"scenes"}):
+class ProjectSimplified(Project, exclude={"scenes"}):
     pass
 
 
-class ProjectCreate(Project, CreateSchemaMixin, exclude={"scenes"}):
-    pass
+class ProjectCreate(Project, CreateSchemaBase, exclude={"scenes"}):
+    access: Access = Access.PRIVATE
 
 
 class ProjectUpdate(
     Project,
-    UpdateSchemaMixin,
+    UpdateSchemaBase,
     exclude={"scenes"},
     optional=ProjectCreate.model_fields,
 ):
@@ -77,7 +81,7 @@ class GetProjectsResponse(ItemsResponseBase[Project]):
 ########################################################################################
 
 
-class SceneSimplified(BaseSchema, DeclarativeFieldsMixin):
+class SceneSimplified(EntityMixin):
     name: str
     app_state: AppState
 
@@ -104,15 +108,16 @@ class SceneWithProject(SceneSimplified):
 class SceneExtended(SceneWithProject):
     """Scene with project and elements."""
 
-    elements: list[Element]
+    elements: list[Element] = Field(repr=False)
 
 
 class SceneCreate(
     SceneExtended,
-    CreateSchemaMixin,
+    CreateSchemaBase,
     exclude={"project"},
     optional={"elements", "app_state"},
 ):
+    access: Access = Access.PRIVATE
     files: list[FileCreate] = []
     """User's `images` (not `renders`). It's required for creating scenes from '.objective' file. """
     project_id: ITEM_PG_ID
@@ -120,7 +125,7 @@ class SceneCreate(
 
 class SceneUpdate(
     SceneExtended,
-    UpdateSchemaMixin,
+    UpdateSchemaBase,
     optional=SceneCreate.model_fields,
     exclude={"project", "elements"},
 ):
@@ -144,7 +149,7 @@ class GetScenesResponse(ItemsResponseBase[SceneExtended]):
 ElementID = Annotated[str, ...]
 
 
-class AppState(BaseSchema, extra="allow"):
+class AppState(SchemaBase, extra="allow"):
     """
     Partial Excalidraw app state.
 
@@ -152,8 +157,11 @@ class AppState(BaseSchema, extra="allow"):
     :note name: `AppState.name` is deprecated and `Scene.name` should be used instead.
     """
 
+    def __repr_args__(self):
+        yield ("name", self.model_extra and self.model_extra.get("name"))
 
-class Element(BaseSchema, extra="allow"):
+
+class Element(SchemaBase, extra="allow"):
     id: ElementID
     is_deleted: bool
 
@@ -183,12 +191,15 @@ class Element(BaseSchema, extra="allow"):
     file_id: str | None = None
     status: FileStatus | None = None
 
+    def __repr_args__(self):
+        yield ("id", self.id)
+
 
 class GetElementsResponse(ItemsResponseBase[Element]):
     next_sync_token: float
 
 
-class SyncElementsRequest(BaseSchema):
+class SyncElementsRequest(SchemaBase):
     items: list[Element]
     """Elements to append or/and reconcile with current Scene elements. """
 
@@ -211,7 +222,7 @@ class FileKind(StrEnum):
     RENDER = "render"
 
 
-class FileSimplified(BaseSchema, DeclarativeFieldsMixin):
+class FileSimplified(DeclarativeSchemaBase):
     id: FileID
     type: str = Field(alias="mimeType")
 
@@ -225,7 +236,7 @@ class FileExtended(FileSimplified):
     data: str = Field(alias="dataURL")
 
 
-class FileCreate(FileExtended, CreateWithIDSchemaMixin):
+class FileCreate(FileExtended, CreateWithIDSchemaBase):
     id: FileID
 
 
@@ -234,7 +245,7 @@ class FileCreate(FileExtended, CreateWithIDSchemaMixin):
 ########################################################################################
 
 
-class FiltersBase(BaseSchema):
+class FiltersBase(SchemaBase):
     class CreatedBy(StrEnum):
         current_user = "current_user"
         any = "*"
@@ -251,7 +262,7 @@ class SceneFilters(FiltersBase):
     project_id: uuid.UUID | None = None
 
 
-class ElementsFilters(BaseSchema):
+class ElementsFilters(SchemaBase):
     sync_token: float = 0.0
 
 
@@ -265,7 +276,7 @@ class FileJsonPersistence(FileCreate, extra="ignore"):
     pass
 
 
-class SceneJsonFilePersistence(BaseSchema, extra="ignore"):
+class SceneJsonFilePersistence(SchemaBase, extra="ignore"):
     type: str | None = None
     version: int | None = None
     source: str | None = None
@@ -276,3 +287,6 @@ class SceneJsonFilePersistence(BaseSchema, extra="ignore"):
     @property
     def name(self) -> str:
         return self.app_state.get("name") or "Untitled Scene"
+
+    def __repr_args__(self):
+        yield from []

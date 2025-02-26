@@ -20,7 +20,7 @@ from typing_extensions import Annotated
 from .constructor import ModelConstructor
 
 
-class BaseSchema(ModelConstructor):
+class SchemaBase(ModelConstructor):
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -31,9 +31,13 @@ class BaseSchema(ModelConstructor):
         json_schema_serialization_defaults_required=True,
     )
 
+    def __repr_args__(self):
+        for k, v in super().__repr_args__():
+            if k in self.model_fields_set and self.model_fields[k].repr:
+                yield (k, v)
+
     def __str__(self) -> str:
-        data = self.model_dump(exclude_none=True, exclude_unset=True)
-        return f"{self.__class__.__name__}({data})"
+        return repr(self)
 
 
 class DictModel(RootModel):

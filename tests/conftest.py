@@ -199,14 +199,22 @@ TEST_USERS = {
         password="password",
         username="user_a",
         role="string",
+        is_superuser=True,
     ),
     2: schemas.UserCreate(
         email="user_b@test.com",
         password="password",
         username="user_b",
         role="string",
+        is_superuser=True,
     ),
 }
+
+
+@pytest.fixture
+def users() -> dict[int, schemas.UserCreate]:
+    # for possible overrides
+    return TEST_USERS
 
 
 @pytest.fixture
@@ -214,13 +222,18 @@ async def setup_users(
     app_request: ObjectiveRequest,
     database_context: TDatabaseContext,
     settings: AppSettings,
-):
-    users: dict[int, schemas.User] = {}
+    users: dict[int, schemas.UserCreate],
+) -> dict[int, schemas.User]:
+    res: dict[int, schemas.User] = {}
     async with database_context() as db:
         async with UserManagerContext(db, settings) as user_manager:
-            for k, user in TEST_USERS.items():
-                users[k] = await user_manager.create(user, request=app_request)
-    return users
+            for k, user in users.items():
+                res[k] = await user_manager.create(
+                    user,
+                    safe=False,
+                    request=app_request,
+                )
+    return res
 
 
 @pytest.fixture
@@ -264,27 +277,27 @@ def client(setup_clients: dict[int, ObjectiveClient]) -> ObjectiveClient:
 
 
 @pytest.fixture
-def USER_A(setup_users: dict[int, schemas.User]):
+def USER_A(setup_users: dict[int, schemas.User]) -> schemas.User:
     return setup_users[1]
 
 
 @pytest.fixture
-def USER_B(setup_users: dict[int, schemas.User]):
+def USER_B(setup_users: dict[int, schemas.User]) -> schemas.User:
     return setup_users[2]
 
 
 @pytest.fixture
-def CLIENT_A(setup_clients: dict[int, ObjectiveClient]):
+def CLIENT_A(setup_clients: dict[int, ObjectiveClient]) -> ObjectiveClient:
     return setup_clients[1]
 
 
 @pytest.fixture
-def CLIENT_B(setup_clients: dict[int, ObjectiveClient]):
+def CLIENT_B(setup_clients: dict[int, ObjectiveClient]) -> ObjectiveClient:
     return setup_clients[2]
 
 
 ########################################################################################
-# User A data:
+# Short aliases to USER_A fixtures
 ########################################################################################
 
 

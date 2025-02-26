@@ -1,19 +1,19 @@
 from abc import ABC, abstractmethod
 
-from common.schemas.base import BaseSchema
+from common.schemas.base import SchemaBase
 
 
 class AbstractRepository(ABC):
     @abstractmethod
-    async def get(self, pk: int, *args, **kwargs) -> BaseSchema:
+    async def get(self, pk: int, *args, **kwargs) -> SchemaBase:
         ...
 
     @abstractmethod
-    async def create(self, payload: BaseSchema, *args, **kwargs) -> BaseSchema:
+    async def create(self, payload: SchemaBase, *args, **kwargs) -> SchemaBase:
         ...
 
     @abstractmethod
-    async def update(self, pk: int, payload: BaseSchema, *args, **kwargs) -> BaseSchema:
+    async def update(self, pk: int, payload: SchemaBase, *args, **kwargs) -> SchemaBase:
         ...
 
     @abstractmethod

@@ -1,5 +1,8 @@
+from typing import Any
+
 from starlette import status
 
+from common.common._exceptions import ErrorDetails
 from common.fastapi.exceptions import (
     BadRequest,
     BaseHTTPException,
@@ -30,7 +33,9 @@ class NotFoundInstanceError(NotFoundError):
 
 
 class DeletedInstanceError(NotFoundInstanceError):
-    pass
+    def __init__(self, instance: Any, detail: str | ErrorDetails | Any) -> None:
+        self.instance = instance
+        super().__init__(detail)
 
 
 ########################################################################################

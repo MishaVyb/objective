@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from starlette import status
 
 from app.dependencies.users import AuthRouterDepends
+from app.exceptions import DeletedInstanceError
 from app.repository.repositories import DatabaseRepositoriesDepends
 from app.schemas import schemas
 from common.fastapi.monitoring.base import LoggerDepends
@@ -69,7 +70,10 @@ async def delete_project(
     id: UUID,
 ) -> schemas.Project:
     """Mark as deleted."""
-    return await db.projects.update(id, is_deleted=True)
+    try:
+        return await db.projects.update(id, is_deleted=True)
+    except DeletedInstanceError as e:
+        return e.instance
 
 
 ########################################################################################
@@ -155,7 +159,10 @@ async def delete_scene(
     scene_id: UUID,
 ) -> schemas.SceneSimplified:
     """Mark as deleted."""
-    return await db.scenes_simplified.update(scene_id, is_deleted=True)
+    try:
+        return await db.scenes_simplified.update(scene_id, is_deleted=True)
+    except DeletedInstanceError as e:
+        return e.instance
 
 
 ########################################################################################

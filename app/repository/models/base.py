@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any, Optional, Type
 
 from pydantic.alias_generators import to_snake
@@ -18,7 +19,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.config import AppSettings
-from common.schemas.base import BaseSchema
+from common.schemas.base import SchemaBase
 
 if TYPE_CHECKING:
     from app.repository.models.users import User
@@ -60,6 +61,33 @@ class ForceString(types.TypeDecorator):
         return value
 
 
+class DatabaseStringEnum(types.TypeDecorator):
+    impl = String()
+    cache_ok = True
+
+    def __init__(self, enum_class: Type[StrEnum], *args: Any, **kwargs: Any) -> None:
+        self._enum_class = enum_class
+        super().__init__(*args, **kwargs)
+
+    def process_bind_param(
+        self,
+        value: Any | None,
+        dialect: engine.interfaces.Dialect,
+    ) -> None | str:
+        if value is None:
+            return value
+        return str(value)
+
+    def process_result_value(
+        self,
+        value: Any | None,
+        dialect: engine.interfaces.Dialect,
+    ) -> None | StrEnum:
+        if value is None:
+            return value
+        return self._enum_class(value)
+
+
 STR_255 = Annotated[str, mapped_column(ForceString(255))]
 
 
@@ -71,7 +99,7 @@ class Base(DeclarativeBase):
         list: JSON,
     }
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: uuid.UUID
 
     @classmethod
     def setup(cls, settings: AppSettings):
@@ -90,7 +118,7 @@ class Base(DeclarativeBase):
     @classmethod
     def columns_depending_on(
         cls,
-        reference_scheme: Type[BaseSchema],
+        reference_scheme: Type[SchemaBase],
     ) -> list[QueryableAttribute]:
         columns = cls.__table__.columns
         return [

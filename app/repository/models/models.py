@@ -16,6 +16,7 @@ from .users import User
 
 class Project(DeclarativeFieldsMixin):
     name: Mapped[str]
+    access: Mapped[str] = mapped_column(server_default=schemas.Access.PRIVATE)
 
     # relations:
     scenes: Mapped[list[Scene]] = relationship(
@@ -30,11 +31,11 @@ class Scene(DeclarativeFieldsMixin):
 
     # objective scene meta info
     name: Mapped[str]
+    access: Mapped[str] = mapped_column(server_default=schemas.Access.PRIVATE)
 
+    # renders (thumbnails/export), not user images:
     files: Mapped[list[File]] = relationship(
         secondary=lambda: FileToSceneAssociation.__table__,
-        # primaryjoin=UserToEventComposedAssociation.user_id == id,
-        # secondaryjoin=UserToEventComposedAssociation.event_id == EventComposed.id,
         viewonly=True,
         order_by=lambda: FileToSceneAssociation.id,
     )

@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from logging import Logger
-from typing import TYPE_CHECKING, Annotated, Any, Never, Self, Sequence
+from typing import TYPE_CHECKING, Annotated, Any, Never, Self, Sequence, TypeVar, cast
 from uuid import UUID
 
 from fastapi import Depends
@@ -40,11 +40,55 @@ else:
 _CURRENT_USER: Any = object()
 
 
-# NOTE: Specific logic for Objective only (not common)
 class ServiceRepositoryBase(
     SQLAlchemyRepository[_ModelType, _SchemaType, _CreateSchemaType, _UpdateSchemaType],
 ):
-    db: "DatabaseRepositories"
+    """
+    Specific logic for Objective services only (not common).
+    """
+
+    db: "DatabaseRepositories"  # initialized in DatabaseRepositories.__post_init__
+
+    def _use_filters(
+        self,
+        filters: schemas.FiltersBase | None,
+        *,
+        is_deleted: bool = False,  # is deleted flag is omitted
+        **extra_filters,
+    ) -> dict:
+        if is_deleted:
+            raise NotImplementedError
+        return super()._use_filters(filters, **extra_filters)
+
+
+_EntitySchemaType = TypeVar(
+    "_EntitySchemaType",
+    bound=schemas.Project | schemas.SceneSimplified,
+)
+_CreateEntitySchemaType = TypeVar(
+    "_CreateEntitySchemaType",
+    bound=schemas.ProjectCreate | schemas.SceneCreate,
+)
+_UpdateEntitySchemaType = TypeVar(
+    "_UpdateEntitySchemaType",
+    bound=schemas.ProjectUpdate | schemas.SceneUpdate,
+)
+
+
+class ProjectsScenesServicesRepositoryBase(
+    ServiceRepositoryBase[
+        _ModelType,
+        _EntitySchemaType,
+        _CreateEntitySchemaType,
+        _UpdateEntitySchemaType,
+    ],
+):
+    """
+    Base logic for Objective ententes (Projects and Scenes).
+
+    - Applies common filters
+    - Applies access rights for read, create, update actions.
+    """
 
     def _use_filters(
         self,
@@ -53,9 +97,6 @@ class ServiceRepositoryBase(
         is_deleted: bool = False,
         **extra_filters,
     ) -> dict:
-        if is_deleted:
-            raise NotImplementedError  # using is_deleted flag from request Query
-
         if filters:
 
             # filters modifications:
@@ -64,65 +105,134 @@ class ServiceRepositoryBase(
             if filters.created_by_id == schemas.FiltersBase.CreatedBy.any:
                 filters = filters.model_remake(_self_exclude={"created_by_id"})
 
-        return super()._use_filters(filters, **extra_filters)
+        return super()._use_filters(filters, is_deleted=is_deleted, **extra_filters)
+
+    async def get(
+        self,
+        pk: uuid.UUID,
+        *,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        refresh: bool = False,
+    ) -> _EntitySchemaType:
+        r = await super().get(pk, options=options, refresh=refresh)
+        if not await self.check_read_rights(r):
+            raise NotEnoughRights(f"Not enough rights to read: {r}")
+        return r
+
+    async def get_filter(
+        self,
+        filters: schemas.FiltersBase | None = None,
+        *,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        is_deleted: bool = False,
+        clauses: list[ColumnExpressionArgument] = (),
+        **extra_filters,
+    ) -> list[_EntitySchemaType]:
+        r = await super().get_filter(
+            filters,
+            options=options,
+            is_deleted=is_deleted,
+            clauses=clauses,
+            **extra_filters,
+        )
+        return await self.use_items_list(r)
 
     async def create(
         self,
-        payload: _CreateSchemaType,
+        payload: _CreateEntitySchemaType,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         refresh: bool = False,
         **extra_values,
-    ) -> _SchemaType:
+    ) -> _EntitySchemaType:
         instance = await super().create(payload, options, refresh, **extra_values)
-        await self.check_create_rights(instance)
+        if not await self.check_create_rights(instance):
+            raise NotEnoughRights(f"Not enough rights to create: {instance}")
         return instance
 
     async def update(
         self,
         pk: UUID,
-        payload: _UpdateSchemaType | None = None,
+        payload: _UpdateEntitySchemaType | None = None,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         flush: bool = False,
         refresh: bool = False,
         **extra_values,
-    ) -> _SchemaType:
+    ) -> _EntitySchemaType:
         instance = await super().update(
             pk, payload, options, flush, refresh, **extra_values
         )
-        await self.check_update_rights(instance, payload)
+        if not await self.check_update_rights(instance, payload):
+            raise NotEnoughRights(f"Not enough rights to update: {instance}")
         return instance
 
-    # TODO check access rights
-    # async def pending_create(self, payload: _CreateSchemaType, **extra_values) -> None:
-    #     instance = await super().pending_create(payload, **extra_values)
-    #     await self.check_create_rights(instance)
-    #     return instance
+    async def pending_create(
+        self, payload: _CreateEntitySchemaType, **extra_values
+    ) -> None:
+        # WARNING: no rights verification, should be used in authorized context only
+        return await super().pending_create(payload, **extra_values)
 
-    # async def pending_update(
-    #     self, pk: UUID, payload: _UpdateSchemaType | None = None, **extra_values
-    # ) -> None:
-    #     instance = await super().pending_update(pk, payload, **extra_values)
-    #     await self.check_create_rights(instance)
-    #     return instance
+    async def pending_update(
+        self, pk: UUID, payload: _UpdateEntitySchemaType | None = None, **extra_values
+    ) -> None:
+        # WARNING: no rights verification, should be used in authorized context only
+        return await super().pending_update(pk, payload, **extra_values)
 
-    # TMP solution
-    async def check_read_rights(self, instance: _SchemaType):
-        pass
+    # access rights:
 
-    async def check_create_rights(self, instance: _SchemaType):
-        pass
+    def is_author_or_admin(self, instance: schemas.EntityMixin) -> bool:
+        return (
+            self.current_user.id == instance.created_by_id
+            or self.current_user.is_superuser
+        )
+
+    async def check_create_rights(self, instance: _EntitySchemaType) -> bool:
+        raise NotImplementedError
+
+    async def check_read_rights(self, instance: _EntitySchemaType) -> bool:
+        if instance.access == schemas.Access.PRIVATE:
+            return self.is_author_or_admin(instance)
+
+        elif instance.access == schemas.Access.PROTECTED:
+            return True
+
+        elif instance.access == schemas.Access.PUBLIC:
+            return True
 
     async def check_update_rights(
         self,
-        instance: _SchemaType,
-        payload: _UpdateSchemaType | None,
-    ):
-        if self.current_user.id != instance.created_by_id:  # type: ignore
-            raise NotEnoughRights(f"Not enough rights to update: {instance}")
+        instance: _EntitySchemaType,
+        payload: _UpdateEntitySchemaType | None,
+    ) -> bool:
+        is_author = self.is_author_or_admin(instance)
+
+        # only author cas set entity Access
+        if payload and payload.access and is_author is False:
+            return False
+
+        if instance.access == schemas.Access.PRIVATE:
+            return is_author
+
+        elif instance.access == schemas.Access.PROTECTED:
+            return is_author
+
+        elif instance.access == schemas.Access.PUBLIC:
+            return True
+
+    async def use_items_list(
+        self,
+        r: list[_EntitySchemaType],
+    ) -> list[_EntitySchemaType]:
+        result = []
+        for item in r:
+            if await self.check_read_rights(item):
+                result.append(item)
+            else:
+                self.logger.warning("Not enough rights to read: %r. Skip. ", item)
+        return result
 
 
 class ProjectRepository(
-    ServiceRepositoryBase[
+    ProjectsScenesServicesRepositoryBase[
         models.Project,
         schemas.Project,
         schemas.ProjectCreate,
@@ -141,6 +251,36 @@ class ProjectRepository(
                 raiseload=True,
             ),
         ]
+
+    async def get(
+        self,
+        pk: uuid.UUID,
+        *,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        refresh: bool = False,
+    ) -> schemas.Project:
+        r = await super().get(pk, options=options, refresh=refresh)
+        await self.use_project_scenes([r])
+        return r
+
+    async def get_filter(
+        self,
+        filters: schemas.FiltersBase | None = None,
+        *,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        is_deleted: bool = False,
+        clauses: list[ColumnExpressionArgument] = (),
+        **extra_filters,
+    ) -> list[schemas.Project]:
+        result = await super().get_filter(
+            filters,
+            options=options,
+            is_deleted=is_deleted,
+            clauses=clauses,
+            **extra_filters,
+        )
+        await self.use_project_scenes(result)
+        return result
 
     # DEPRECATED
     DEFAULT_PROJECT_NAME = "Examples"
@@ -183,9 +323,40 @@ class ProjectRepository(
 
         return project
 
+    async def update(
+        self,
+        pk: UUID,
+        payload: schemas.ProjectUpdate | None = None,
+        options: Sequence[ORMOption] = _CLASS_DEFAULT,
+        flush: bool = False,
+        refresh: bool = False,
+        **extra_values,
+    ) -> schemas.Project:
+        res = await super().update(pk, payload, options, flush, refresh, **extra_values)
+
+        # set the same Access for all project scenes
+        if payload and payload.access:
+            for scene in res.scenes:
+                await self.db.scenes_simplified.pending_update(
+                    scene.id,
+                    schemas.SceneUpdate(access=payload.access),
+                )
+            res = await self.get(res.id, refresh=True)
+
+        return res
+
+    async def check_create_rights(self, instance: schemas.Project) -> bool:
+        return True
+
+    async def use_project_scenes(self, projects: list[schemas.Project]):
+        for project in projects:
+            project.scenes = await self.db.scenes.use_items_list(
+                cast(list[schemas.SceneExtendedInternal], project.scenes),
+            )
+
 
 class SceneRepository(
-    ServiceRepositoryBase[
+    ProjectsScenesServicesRepositoryBase[
         models.Scene,
         schemas.SceneExtendedInternal,
         schemas.SceneCreate,
@@ -228,25 +399,22 @@ class SceneRepository(
         await self.db.all.flush()
         return await self.get(scene.id, refresh=True)
 
-    async def update(
-        self,
-        pk,
-        payload=None,
-        options=_CLASS_DEFAULT,
-        flush=False,
-        refresh=False,
-        **extra_values,
-    ):
+    async def update(self, *args, **kwargs):
         raise NotImplementedError(f"{SceneSimplifiedRepository} should be used. ")
 
-    # TMP easy solution
-    async def check_create_rights(self, instance: schemas.SceneExtended):
-        if self.current_user.id != instance.project.created_by_id:
-            raise NotEnoughRights(f"Not enough rights to update: {instance.project}")
+    async def pending_update(self, *args, **kwargs):
+        raise NotImplementedError(f"{SceneSimplifiedRepository} should be used. ")
+
+    async def check_create_rights(self, instance: schemas.SceneExtended) -> bool:
+        """Check is scene can be created in desired project."""
+        return await self.db.projects.check_update_rights(
+            instance.project,
+            payload=None,
+        )
 
 
 class SceneSimplifiedRepository(
-    ServiceRepositoryBase[
+    ProjectsScenesServicesRepositoryBase[
         models.Scene,
         schemas.SceneWithProject,
         Never,
@@ -300,6 +468,7 @@ class SceneSimplifiedRepository(
                     schemas.FileToSceneInternal(file_id=file_id, scene_id=instance.id),
                 )
 
+        await self.flush([pk])
         return await self.get(pk, refresh=True)
 
     async def inform_mutation(self, pk: uuid.UUID) -> None:
@@ -310,14 +479,18 @@ class SceneSimplifiedRepository(
             updated_at=datetime.now(timezone.utc),
         )
 
-    # TMP easy solution
     async def check_update_rights(
         self,
         instance: schemas.SceneExtended,
-        payload: schemas.SceneUpdate,
-    ):
-        if self.current_user.id != instance.project.created_by_id:
-            raise NotEnoughRights(f"Not enough rights to update: {instance.project}")
+        payload: schemas.SceneUpdate | None,
+    ) -> bool:
+        if payload and payload.project_id:
+            if not await self.db.projects.check_update_rights(
+                instance.project,
+                payload=None,
+            ):
+                return False
+        return await super().check_update_rights(instance, payload)
 
 
 class ElementRepository(
@@ -358,6 +531,10 @@ class ElementRepository(
         return stm
 
     async def get(self, scene_id: uuid.UUID, filters: schemas.ElementsFilters):
+        # verify scene existence and read access rights:
+        scene = await self.db.scenes_simplified.get(scene_id)
+
+        # fetch els:
         next_sync_token = time.time()
         items: list[schemas.Element] = await self.get_where(
             clauses=[
@@ -401,8 +578,11 @@ class ElementRepository(
         payload: schemas.SyncElementsRequest,
         filters: schemas.ElementsFilters,
     ):
-        payload_els = {el.id: el for el in payload.items}
+        # verify scene existence and read access rights:
+        scene = await self.db.scenes_simplified.get(scene_id)
 
+        # fetch els:
+        payload_els = {el.id: el for el in payload.items}
         items = await self.db.elements.get_where(
             clauses=[
                 self.model._scene_id == scene_id,
@@ -460,6 +640,7 @@ class ElementRepository(
             await self.pending_create(el, _scene_id=scene_id)
 
         if has_updates:
+            # update rights for current scene is verified here internally:
             await self.db.scenes_simplified.inform_mutation(scene_id)
 
         await self.session.flush()

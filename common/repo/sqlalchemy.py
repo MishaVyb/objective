@@ -28,13 +28,14 @@ from app.exceptions import (
     RefreshModifiedInstanceError,
 )
 from app.schemas.base import (
-    CreateSchemaMixin,
-    CreateWithIDSchemaMixin,
-    DeclarativeFieldsMixin,
-    UpdateSchemaMixin,
+    CreateSchemaBase,
+    CreateWithIDSchemaBase,
+    DeclarativeSchemaBase,
+    EntityMixin,
+    UpdateSchemaBase,
 )
 from common.fastapi.monitoring.base import LoggerDepends
-from common.schemas.base import BaseSchema, DictModel
+from common.schemas.base import DictModel, SchemaBase
 
 from .base import AbstractRepository
 
@@ -54,15 +55,15 @@ logger = logging.getLogger(__name__)
 _ModelType = TypeVar("_ModelType", bound=DatabaseDeclarativeFieldsMixin)
 _SchemaType = TypeVar(
     "_SchemaType",
-    bound=DeclarativeFieldsMixin | BaseSchema,
+    bound=DeclarativeSchemaBase | EntityMixin | SchemaBase,
 )
 _CreateSchemaType = TypeVar(
     "_CreateSchemaType",
-    bound=CreateSchemaMixin | CreateWithIDSchemaMixin | BaseSchema,
+    bound=CreateSchemaBase | CreateWithIDSchemaBase | EntityMixin | SchemaBase,
 )
 _UpdateSchemaType = TypeVar(
     "_UpdateSchemaType",
-    bound=UpdateSchemaMixin | BaseSchema,
+    bound=UpdateSchemaBase | EntityMixin | SchemaBase,
 )
 _IdentityKeyType = tuple[Type[_ModelType], tuple[Any, ...], Optional[Any]]
 
@@ -201,6 +202,7 @@ class SQLAlchemyRepository(
         *,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         refresh: bool = False,
+        including_deleted: bool = False,
     ) -> _SchemaType:
         if refresh:
             instance = await self._get_instance_refresh(pk, options)
@@ -273,7 +275,7 @@ class SQLAlchemyRepository(
         except exc.NoResultFound:
             raise NotFoundInstanceError(str(pk))
         if instance.is_deleted and not including_deleted:
-            raise DeletedInstanceError(str(instance))
+            raise DeletedInstanceError(instance, str(instance))
 
         self.logger.debug("[DATABASE] Got: %s", instance)
         self._storage.populate()
@@ -309,7 +311,7 @@ class SQLAlchemyRepository(
         except exc.NoResultFound:
             raise NotFoundInstanceError(pk)
         if instance.is_deleted:
-            raise DeletedInstanceError(str(instance))
+            raise DeletedInstanceError(instance, str(instance))
         self._storage.populate()
         return instance
 
@@ -337,7 +339,7 @@ class SQLAlchemyRepository(
 
     async def get_filter(
         self,
-        filters: BaseSchema | None = None,
+        filters: SchemaBase | None = None,
         *,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         is_deleted: bool = False,
@@ -356,7 +358,7 @@ class SQLAlchemyRepository(
 
     def _use_statement_get_instances_list(  # separate method for inheritance override
         self,
-        filters: BaseSchema | None = None,
+        filters: SchemaBase | None = None,
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         is_deleted: bool = False,
         clauses: list[ColumnExpressionArgument] = (),
@@ -438,7 +440,7 @@ class SQLAlchemyRepository(
         if not data:
             return self._use_result(instance)
 
-        self.logger.debug("[DATABASE] Update: %s. Set values: %s", instance, data)
+        self.logger.debug("[DATABASE] Update: %s. ", instance)
         for k, v in data.items():
             setattr(instance, k, v)
 
@@ -531,7 +533,7 @@ class SQLAlchemyRepository(
         payload_values = payload.model_dump(include=payload_fields)
         return payload_values | extra_values
 
-    def _use_filters(self, filters: BaseSchema | None, **extra_filters) -> dict:
+    def _use_filters(self, filters: SchemaBase | None, **extra_filters) -> dict:
         if not filters:
             result_filters = extra_filters
         else:

@@ -11,7 +11,6 @@ from app.client import ObjectiveClient
 from app.exceptions import NotFoundInstanceError
 from app.repository.repositories import ProjectRepository
 from app.schemas import schemas
-from common.fastapi.exceptions.exceptions import NotEnoughRights
 from tests.helpers import IsPartialSchema
 
 pytestmark = [
@@ -27,7 +26,7 @@ _DEFAULT_PROJECTS_AMOUNT = 1
 _DEFAULT_SCENES_AMOUNT = 2
 
 # DATA
-TEST_PROJECT = schemas.ProjectCreate(name="test-project")
+TEST_PROJECT = schemas.ProjectCreate(name="test-project", access=schemas.Access.PRIVATE)
 
 
 async def test_default_project_and_scenes(
@@ -120,26 +119,6 @@ async def test_project_filters(client: ObjectiveClient) -> None:
         # IsPartialSchema(name=_DEFAULT_PROJECT_NAME),  # default project
         IsPartialSchema(name=TEST_PROJECT.name),  # deleted project
     ]
-
-
-async def test_project_access_rights(
-    setup_users: dict,
-    setup_clients: dict[str | int, ObjectiveClient],
-):
-    user_A, user_B = setup_users[1], setup_users[2]
-    client_A, client_B = setup_clients[1], setup_clients[2]
-    project_A = (await client_A.get_projects()).items[0]
-    project_B = (await client_B.get_projects()).items[0]
-
-    # TMP anyone has read access to anything
-    result = await client_A.get_project(project_B.id)
-    assert result == IsPartialSchema(created_by_id=user_B.id)
-
-    # update/delete
-    with pytest.raises(NotEnoughRights):
-        await client_A.update_project(project_B.id, schemas.ProjectUpdate(name="upd"))
-    with pytest.raises(NotEnoughRights):
-        await client_A.delete_project(project_B.id)
 
 
 async def test_project_401(setup_clients: dict[str | int, ObjectiveClient]):

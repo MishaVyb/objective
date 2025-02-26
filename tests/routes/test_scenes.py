@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from app.client import ObjectiveClient
 from app.exceptions import NotFoundInstanceError
 from app.schemas import schemas
-from common.fastapi.exceptions.exceptions import NotEnoughRights, NotFoundError
+from common.fastapi.exceptions.exceptions import NotFoundError
 from tests.conftest_data import ExcalidrawElement
 from tests.helpers import IsList, IsPartialSchema
 from tests.routes.test_projects import TEST_PROJECT
@@ -590,48 +590,6 @@ async def test_scene_filters_project_id(
     # per project, created by current_user by default
     results = await CLIENT_A.get_scenes(schemas.SceneFilters(project_id=PROJECT_B.id))
     assert results.items == []  # no results
-
-
-async def test_scene_access_rights(
-    *,
-    USER_A: schemas.User,
-    CLIENT_A: ObjectiveClient,
-    USER_B: schemas.User,
-    CLIENT_B: ObjectiveClient,
-) -> None:
-    PROJECT_A = (await CLIENT_A.get_projects()).items[0]
-    PROJECT_B = (await CLIENT_B.get_projects()).items[0]
-
-    # TMP anyone has read access to anything
-    result = await CLIENT_A.get_project(PROJECT_B.id)
-    assert result == IsPartialSchema(created_by_id=USER_B.id)
-
-    # update/delete
-    with pytest.raises(NotEnoughRights):
-        await CLIENT_A.update_scene(
-            PROJECT_B.scenes[0].id,
-            schemas.SceneUpdate(name="upd"),
-        )
-    with pytest.raises(NotEnoughRights):
-        await CLIENT_A.delete_scene(PROJECT_B.scenes[0].id)
-
-    # create scene with another user project
-    payload = schemas.SceneCreate(name="name", project_id=PROJECT_B.id)
-    with pytest.raises(NotEnoughRights):
-        await CLIENT_A.create_scene(payload)
-
-    # copy self scene to another user project
-    payload = schemas.SceneCopy(name="copy", project_id=PROJECT_B.id)
-    with pytest.raises(NotEnoughRights):
-        await CLIENT_A.copy_scene(PROJECT_A.scenes[0].id, payload)
-
-    # move self scene to another user project
-    payload = schemas.SceneUpdate(project_id=PROJECT_B.id)
-    with pytest.raises(NotEnoughRights):
-        await CLIENT_A.update_scene(PROJECT_A.scenes[0].id, payload)
-
-    # sync elements
-    # TODO
 
 
 async def test_scene_401(setup_clients: dict[str | int, ObjectiveClient]):

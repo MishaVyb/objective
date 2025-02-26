@@ -23,6 +23,6 @@ class ElementInternal(Element):
         return obj
 
 
-class FileToSceneInternal(BaseSchema):
+class FileToSceneInternal(SchemaBase):
     file_id: FileID
     scene_id: uuid.UUID
