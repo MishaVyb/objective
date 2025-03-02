@@ -52,6 +52,7 @@ class Project(EntityMixin):
     name: str
 
     # relations
+    created_by: User
     scenes: list[SceneSimplified]
 
 
@@ -59,14 +60,14 @@ class ProjectSimplified(Project, exclude={"scenes"}):
     pass
 
 
-class ProjectCreate(Project, CreateSchemaBase, exclude={"scenes"}):
+class ProjectCreate(Project, CreateSchemaBase, exclude={"created_by", "scenes"}):
     access: Access = Access.PRIVATE
 
 
 class ProjectUpdate(
     Project,
     UpdateSchemaBase,
-    exclude={"scenes"},
+    exclude={"created_by", "scenes"},
     optional=ProjectCreate.model_fields,
 ):
     pass
@@ -86,6 +87,7 @@ class SceneSimplified(EntityMixin):
     app_state: AppState
 
     # relations:
+    created_by: User
     files: list[FileSimplified] = Field(
         description=(
             f"Files that manually associated with that scene (i.e. `thumbnail`, `export`). "
@@ -114,7 +116,7 @@ class SceneExtended(SceneWithProject):
 class SceneCreate(
     SceneExtended,
     CreateSchemaBase,
-    exclude={"project"},
+    exclude={"project", "created_by"},
     optional={"elements", "app_state"},
 ):
     access: Access = Access.PRIVATE
@@ -127,7 +129,7 @@ class SceneUpdate(
     SceneExtended,
     UpdateSchemaBase,
     optional=SceneCreate.model_fields,
-    exclude={"project", "elements"},
+    exclude={"project", "created_by", "elements"},
 ):
     files: list[FileID] | None = None  # update files (thumbnails/exports)
     project_id: ITEM_PG_ID | None = None  # move scene to another project

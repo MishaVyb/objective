@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import TYPE_CHECKING, Annotated, Any, Optional, Type
+from typing import TYPE_CHECKING, Annotated, Any, Type
 
 from pydantic.alias_generators import to_snake
 from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, String, engine, types
@@ -156,7 +156,7 @@ class DeclarativeFieldsMixin(Base):
 
     @declared_attr
     @classmethod
-    def created_by(cls) -> Mapped[Optional["User"]]:
+    def created_by(cls) -> Mapped["User"]:
         return relationship(foreign_keys=[cls.created_by_id])
 
     is_deleted: Mapped[bool] = mapped_column(default=False)

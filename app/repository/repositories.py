@@ -244,6 +244,8 @@ class ProjectRepository(
 
     class Loading(ServiceRepositoryBase.Loading):
         default = [
+            joinedload(models.Project.created_by),
+            selectinload(models.Project.scenes).joinedload(models.Scene.created_by),
             selectinload(models.Project.scenes)
             .selectinload(models.Scene.files)
             .load_only(
@@ -368,7 +370,8 @@ class SceneRepository(
 
     class Loading(ServiceRepositoryBase.Loading):
         default = [
-            joinedload(models.Scene.project),
+            joinedload(models.Scene.created_by),
+            joinedload(models.Scene.project).joinedload(models.Project.created_by),
             selectinload(models.Scene.elements),
             selectinload(models.Scene.files).load_only(
                 *models.File.columns_depending_on(schemas.FileSimplified),
@@ -429,7 +432,8 @@ class SceneSimplifiedRepository(
     class Loading(ServiceRepositoryBase.Loading):
         default = [
             # no elements loading
-            joinedload(models.Scene.project),
+            joinedload(models.Scene.created_by),
+            joinedload(models.Scene.project).joinedload(models.Project.created_by),
             selectinload(models.Scene.files).load_only(
                 *models.File.columns_depending_on(schemas.FileSimplified),
                 raiseload=True,

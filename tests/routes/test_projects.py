@@ -2,7 +2,7 @@ import logging
 import uuid
 
 import pytest
-from dirty_equals import IsDatetime, IsList
+from dirty_equals import AnyThing, IsDatetime, IsList
 from fastapi import HTTPException
 from starlette import status
 
@@ -32,6 +32,7 @@ TEST_PROJECT = schemas.ProjectCreate(name="test-project", access=schemas.Access.
 async def test_default_project_and_scenes(
     app: ObjectiveAPP,
     client: ObjectiveClient,
+    USER: schemas.User,
 ) -> None:
 
     # check project
@@ -40,12 +41,25 @@ async def test_default_project_and_scenes(
         IsPartialSchema(
             name=_DEFAULT_PROJECT_NAME,
             scenes=IsList(length=_DEFAULT_SCENES_AMOUNT),
+            created_by=IsPartialSchema(id=USER.id),
         ),
     ]
+    project = result.items[0]
 
     # check scenes
     result = await client.get_scenes()
-    assert result.items == IsList(length=_DEFAULT_SCENES_AMOUNT)
+    assert result.items == IsList(
+        IsPartialSchema(
+            name=AnyThing,
+            created_by=IsPartialSchema(id=USER.id),
+            project=IsPartialSchema(
+                id=project.id,
+                created_by=IsPartialSchema(id=project.created_by.id),
+            ),
+        ),
+        # ...
+        length=_DEFAULT_SCENES_AMOUNT,
+    )
 
     # check files
     file_ids = [file for scene in app.state.initial_scenes for file in scene.files]

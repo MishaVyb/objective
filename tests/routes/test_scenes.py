@@ -22,7 +22,7 @@ pytestmark = [
 logger = logging.getLogger("conftest")
 
 
-async def test_scene_crud(client: ObjectiveClient) -> None:
+async def test_scene_crud(client: ObjectiveClient, USER: schemas.User) -> None:
     PROJECT = (await client.get_projects()).items[0]
     ANOTHER_PROJECT = await client.create_project(TEST_PROJECT)
 
@@ -34,6 +34,11 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
     # [1] create simple
     expected = IsPartialSchema(
         name=TEST_SCENE.name,
+        created_by=IsPartialSchema(id=USER.id),
+        project=IsPartialSchema(
+            id=PROJECT.id,
+            created_by=IsPartialSchema(id=PROJECT.created_by.id),
+        ),
     )
     scene = await client.create_scene(TEST_SCENE)
     assert scene == expected
@@ -44,7 +49,7 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
     assert results.items == [
         IsPartialSchema(),  # default
         IsPartialSchema(),  # default
-        IsPartialSchema(name=TEST_SCENE.name),
+        expected,
     ]
 
     # [1.2] create from '.objective' file
@@ -82,6 +87,7 @@ async def test_scene_crud(client: ObjectiveClient) -> None:
     # getting scene from project request
     project = (await client.get_projects()).items[0]
     assert project.scenes[-1] == IsPartialSchema(
+        created_by=IsPartialSchema(id=USER.id),
         name=TEST_SCENE_FROM_FILE.name,
         app_state=IsPartialSchema(extra_field_value="value"),
         type=AnyThing,
