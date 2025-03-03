@@ -120,10 +120,21 @@ async def test_project_access_rights(
     await CLIENT_A.delete_scene(SCENE_B.id)
     await CLIENT_A.update_scene(SCENE_B.id, upd_scene)
 
-    # create/copy/move scene to project is allowed now
-    await CLIENT_A.create_scene(create_payload)
-    await CLIENT_A.copy_scene(PROJECT_A.scenes[0].id, copy_payload)
-    await CLIENT_A.update_scene(PROJECT_A.scenes[0].id, move_payload)
+    # create to project is allowed now
+    scene = await CLIENT_A.create_scene(create_payload)
+    assert scene.access == PROJECT_B.access  # new scene takes project access
+
+    # copy to project is allowed now  # new scene takes project access
+    scene_to_copy = PROJECT_A.scenes[0]
+    copied_scene = await CLIENT_A.copy_scene(scene_to_copy.id, copy_payload)
+    assert scene_to_copy.access == schemas.Access.PRIVATE
+    assert copied_scene.access == schemas.Access.PUBLIC
+
+    # move in project is allowed now  # moved scene takes project access
+    scene_to_move = PROJECT_A.scenes[0]
+    assert scene_to_move.access == schemas.Access.PRIVATE
+    moved_scene = await CLIENT_A.update_scene(scene_to_move.id, move_payload)
+    assert moved_scene.access == schemas.Access.PUBLIC
 
     # but changing access is not allowed
     with pytest.raises(NotEnoughRights):
@@ -262,6 +273,33 @@ async def test_scene_access_rights(
         IsPartialSchema(access=schemas.Access.PUBLIC),
         IsPartialSchema(access=schemas.Access.PUBLIC),
     ]
+
+    # [6] On Scene creation scene.access will be taken from project.access
+    # [6.1] PUBLIC
+    scene = await CLIENT_A.create_scene(
+        schemas.SceneCreate(name="new", project_id=PROJECT_B.id),
+    )
+    assert scene.access == schemas.Access.PUBLIC
+
+    # [6.2] the same for PROTECTED
+    PROJECT_B = await CLIENT_B.update_project(
+        PROJECT_B.id,
+        schemas.ProjectUpdate(access=schemas.Access.PROTECTED),
+    )
+    scene = await CLIENT_B.create_scene(
+        schemas.SceneCreate(name="new", project_id=PROJECT_B.id),
+    )
+    assert scene.access == schemas.Access.PROTECTED
+
+    # [6.3]  the same for PRIVATE
+    PROJECT_B = await CLIENT_B.update_project(
+        PROJECT_B.id,
+        schemas.ProjectUpdate(access=schemas.Access.PRIVATE),
+    )
+    scene = await CLIENT_B.create_scene(
+        schemas.SceneCreate(name="new", project_id=PROJECT_B.id),
+    )
+    assert scene.access == schemas.Access.PRIVATE
 
 
 async def test_scene_elements_access_rights(

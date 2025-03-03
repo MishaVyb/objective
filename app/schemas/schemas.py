@@ -60,7 +60,11 @@ class ProjectSimplified(Project, exclude={"scenes"}):
     pass
 
 
-class ProjectCreate(Project, CreateSchemaBase, exclude={"created_by", "scenes"}):
+class ProjectCreate(
+    Project,
+    CreateSchemaBase,
+    exclude={"created_by", "scenes", "access"},
+):
     access: Access = Access.PRIVATE
 
 
@@ -68,7 +72,7 @@ class ProjectUpdate(
     Project,
     UpdateSchemaBase,
     exclude={"created_by", "scenes"},
-    optional=ProjectCreate.model_fields,
+    optional=Project.model_fields,
 ):
     pass
 
@@ -116,10 +120,13 @@ class SceneExtended(SceneWithProject):
 class SceneCreate(
     SceneExtended,
     CreateSchemaBase,
-    exclude={"project", "created_by"},
+    exclude={
+        "project",
+        "created_by",
+        "access",  # scene.access will be taken from project.access
+    },
     optional={"elements", "app_state"},
 ):
-    access: Access = Access.PRIVATE
     files: list[FileCreate] = []
     """User's `images` (not `renders`). It's required for creating scenes from '.objective' file. """
     project_id: ITEM_PG_ID
@@ -128,7 +135,7 @@ class SceneCreate(
 class SceneUpdate(
     SceneExtended,
     UpdateSchemaBase,
-    optional=SceneCreate.model_fields,
+    optional=SceneExtended.model_fields | SceneCreate.model_fields,
     exclude={"project", "created_by", "elements"},
 ):
     files: list[FileID] | None = None  # update files (thumbnails/exports)

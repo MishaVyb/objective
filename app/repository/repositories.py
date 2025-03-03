@@ -386,11 +386,13 @@ class SceneRepository(
         refresh: bool = False,
         **extra_values,
     ) -> schemas.SceneExtendedInternal:
+        project = await self.db.projects.get(payload.project_id, refresh=True)
         scene = await super().create(
             payload,
             options,
             refresh,
             **extra_values,
+            access=project.access,
         )
         for file in payload.files:
             if not await self.db.files.exist_where(id=file.id):
@@ -449,6 +451,11 @@ class SceneSimplifiedRepository(
         refresh: bool = False,
         **extra_values,
     ) -> schemas.SceneWithProject:
+        if payload and payload.project_id:
+            # on MoveTo scene takes access from project
+            project = await self.db.projects.get(payload.project_id, refresh=True)
+            payload.access = project.access
+
         instance = await super().update(
             pk, payload, options, flush, refresh, **extra_values
         )

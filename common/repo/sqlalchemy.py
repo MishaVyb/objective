@@ -301,7 +301,7 @@ class SQLAlchemyRepository(
                 raise RefreshModifiedInstanceError(inst, pk)
             self.session.expire(inst)
         else:
-            raise ExpireMissingInstanceError(self, pk)
+            pass  # instance has not been quired
 
         options = self._use_options(options)
         stm = select(self.model).filter_by(id=pk).options(*options)

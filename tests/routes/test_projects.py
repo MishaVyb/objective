@@ -26,7 +26,7 @@ _DEFAULT_PROJECTS_AMOUNT = 1
 _DEFAULT_SCENES_AMOUNT = 2
 
 # DATA
-TEST_PROJECT = schemas.ProjectCreate(name="test-project", access=schemas.Access.PRIVATE)
+TEST_PROJECT = schemas.ProjectCreate(name="test-project")
 
 
 async def test_default_project_and_scenes(
