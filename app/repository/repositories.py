@@ -393,6 +393,8 @@ class SceneRepository(
             refresh,
             **extra_values,
             access=project.access,
+            # NOTE on CopyTo take author from project to simplify permissions validation
+            created_by_id=project.created_by_id,
         )
         for file in payload.files:
             if not await self.db.files.exist_where(id=file.id):
@@ -452,9 +454,11 @@ class SceneSimplifiedRepository(
         **extra_values,
     ) -> schemas.SceneWithProject:
         if payload and payload.project_id:
-            # on MoveTo scene takes access from project
+            # NOTE
+            # on MoveTo scene takes access and author from project to simplify permissions validation
             project = await self.db.projects.get(payload.project_id, refresh=True)
-            payload.access = project.access
+            extra_values["access"] = project.access
+            extra_values["created_by_id"] = project.created_by_id
 
         instance = await super().update(
             pk, payload, options, flush, refresh, **extra_values

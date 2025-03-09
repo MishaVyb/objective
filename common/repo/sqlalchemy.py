@@ -501,9 +501,9 @@ class SQLAlchemyRepository(
             for k, v in inspect(self.model).relationships.items()
             if v.uselist and k not in extra_values
         }
+        extra_values.setdefault("created_by_id", self.current_user.id)
         return self._use_payload(
             payload,
-            created_by_id=self.current_user.id,
             **extra_values,
             **ensure_empty_list_relationships,
         )
@@ -511,9 +511,8 @@ class SQLAlchemyRepository(
     def _use_payload_update(
         self, payload: _CreateSchemaType | _UpdateSchemaType | None, **extra_values
     ) -> dict:
-        return self._use_payload(
-            payload, updated_by_id=self.current_user.id, **extra_values
-        )
+        extra_values.setdefault("updated_by_id", self.current_user.id)
+        return self._use_payload(payload, **extra_values)
 
     def _use_payload(
         self,

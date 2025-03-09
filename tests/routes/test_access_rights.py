@@ -123,18 +123,22 @@ async def test_project_access_rights(
     # create to project is allowed now
     scene = await CLIENT_A.create_scene(create_payload)
     assert scene.access == PROJECT_B.access  # new scene takes project access
+    assert scene.created_by == PROJECT_B.created_by  # new scene takes project author
 
-    # copy to project is allowed now  # new scene takes project access
+    # copy to project is allowed now  # new scene takes project access # new scene takes project author
     scene_to_copy = PROJECT_A.scenes[0]
     copied_scene = await CLIENT_A.copy_scene(scene_to_copy.id, copy_payload)
     assert scene_to_copy.access == schemas.Access.PRIVATE
     assert copied_scene.access == schemas.Access.PUBLIC
+    assert scene_to_copy.created_by == PROJECT_A.created_by
+    assert copied_scene.created_by == PROJECT_B.created_by
 
-    # move in project is allowed now  # moved scene takes project access
+    # move in project is allowed now  # moved scene takes project access # new scene takes project author
     scene_to_move = PROJECT_A.scenes[0]
     assert scene_to_move.access == schemas.Access.PRIVATE
     moved_scene = await CLIENT_A.update_scene(scene_to_move.id, move_payload)
     assert moved_scene.access == schemas.Access.PUBLIC
+    assert moved_scene.created_by == PROJECT_B.created_by
 
     # but changing access is not allowed
     with pytest.raises(NotEnoughRights):

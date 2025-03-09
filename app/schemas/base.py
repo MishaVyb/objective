@@ -14,8 +14,11 @@ warnings.filterwarnings("error", r"Pydantic serializer warnings")
 class DeclarativeSchemaBase(SchemaBase):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
 
-    created_by_id: uuid.UUID
-    updated_by_id: uuid.UUID | None
+    created_by_id: uuid.UUID = Field(deprecated=True)
+    """Deprecated. `created_by: User` should be used. """
+    updated_by_id: uuid.UUID | None = Field(default=None, deprecated=True)
+    """Deprecated. `updated_be: User` should be used. """
+
     created_at: AwareDatetime
     updated_at: AwareDatetime | None
 
