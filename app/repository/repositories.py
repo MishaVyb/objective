@@ -104,6 +104,9 @@ class ProjectsScenesServicesRepositoryBase(
                 filters.created_by_id = self.current_user.id
             if filters.created_by_id == schemas.FiltersBase.CreatedBy.any:
                 filters = filters.model_remake(_self_exclude={"created_by_id"})
+            if filters.ids:
+                # HACK this filter has applied via 'clauses' below
+                filters = filters.model_remake(_self_exclude={"ids"})
 
         return super()._use_filters(filters, is_deleted=is_deleted, **extra_filters)
 
@@ -128,6 +131,9 @@ class ProjectsScenesServicesRepositoryBase(
         clauses: list[ColumnExpressionArgument] = (),
         **extra_filters,
     ) -> list[_EntitySchemaType]:
+        if filters and filters.ids:
+            clauses = list(clauses) + [self.model.id.in_(filters.ids)]
+
         r = await super().get_filter(
             filters,
             options=options,

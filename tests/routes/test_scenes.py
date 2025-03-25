@@ -42,15 +42,20 @@ async def test_scene_crud(client: ObjectiveClient, USER: schemas.User) -> None:
     )
     scene = await client.create_scene(TEST_SCENE)
     assert scene == expected
+
+    # check be get one
     scene = await client.get_scene(scene.id)
     assert scene == expected
 
+    # check be get list
     results = await client.get_scenes()
     assert results.items == [
         IsPartialSchema(),  # default
         IsPartialSchema(),  # default
         expected,
     ]
+    results = await client.get_scenes(schemas.SceneFilters(ids=[scene.id]))
+    assert results.items == [expected]
 
     # [1.2] create from '.objective' file
     TEST_SCENE_FROM_FILE = schemas.SceneCreate(

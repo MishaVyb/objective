@@ -78,14 +78,18 @@ async def test_project_crud(
     result = await client.create_project(TEST_PROJECT)
     assert result == IsPartialSchema(name=TEST_PROJECT.name)
 
+    # check be get one
     result = await client.get_project(result.id)
     assert result == IsPartialSchema(name=TEST_PROJECT.name)
 
+    # check be get list
     results = await client.get_projects()
     assert results.items == [
         IsPartialSchema(name=_DEFAULT_PROJECT_NAME),  # default
         IsPartialSchema(name=TEST_PROJECT.name),
     ]
+    results = await client.get_projects(schemas.ProjectFilters(ids=[result.id]))
+    assert results.items == [IsPartialSchema(name=TEST_PROJECT.name)]
 
     # [2] update
     result = await client.update_project(result.id, schemas.ProjectUpdate(name="upd"))

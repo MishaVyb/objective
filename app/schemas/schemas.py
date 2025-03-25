@@ -261,6 +261,7 @@ class FiltersBase(SchemaBase):
 
     created_by_id: uuid.UUID | CreatedBy = CreatedBy.current_user
     is_deleted: bool | None = None
+    ids: list[uuid.UUID] | None = None
 
 
 class ProjectFilters(FiltersBase):
