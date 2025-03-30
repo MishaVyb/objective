@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import pytest
 
@@ -169,6 +170,7 @@ async def test_scene_access_rights(
     SCENE_A = PROJECT_A.scenes[0]
     SCENE_B = PROJECT_B.scenes[0]
     upd_scene = schemas.SceneUpdate(name="upd", is_deleted=False)
+    result: Any
 
     # [0] default PRIVATE access
     assert SCENE_B.access == schemas.Access.PRIVATE
@@ -197,7 +199,7 @@ async def test_scene_access_rights(
     # [1] grant PROTECTED rights
     SCENE_B = await CLIENT_B.update_scene(
         SCENE_B.id,
-        schemas.ProjectUpdate(access=schemas.Access.PROTECTED),
+        schemas.SceneUpdate(access=schemas.Access.PROTECTED),
     )
     assert SCENE_B.access == schemas.Access.PROTECTED
 
@@ -217,7 +219,7 @@ async def test_scene_access_rights(
     # [3] grant PUBLIC rights
     SCENE_B = await CLIENT_B.update_scene(
         SCENE_B.id,
-        schemas.ProjectUpdate(access=schemas.Access.PUBLIC),
+        schemas.SceneUpdate(access=schemas.Access.PUBLIC),
     )
     assert SCENE_B.access == schemas.Access.PUBLIC
 
@@ -230,7 +232,7 @@ async def test_scene_access_rights(
     with pytest.raises(NotEnoughRights):
         await CLIENT_A.update_scene(
             SCENE_B.id,
-            schemas.ProjectUpdate(access=schemas.Access.PRIVATE),
+            schemas.SceneUpdate(access=schemas.Access.PRIVATE),
         )
 
     ################################################################################
@@ -246,7 +248,7 @@ async def test_scene_access_rights(
     ]
     SCENE_B = await CLIENT_B.update_scene(
         SCENE_B.id,
-        schemas.ProjectUpdate(access=schemas.Access.PRIVATE),
+        schemas.SceneUpdate(access=schemas.Access.PRIVATE),
     )
     assert SCENE_B.access == schemas.Access.PRIVATE
 
@@ -330,7 +332,7 @@ async def test_scene_elements_access_rights(
     # [1] PROTECTED
     SCENE_B = await CLIENT_B.update_scene(
         SCENE_B.id,
-        schemas.ProjectUpdate(access=schemas.Access.PROTECTED),
+        schemas.SceneUpdate(access=schemas.Access.PROTECTED),
     )
 
     await CLIENT_A.get_els(SCENE_B.id)  # ok
@@ -341,7 +343,7 @@ async def test_scene_elements_access_rights(
     # [2] PUBLIC
     SCENE_B = await CLIENT_B.update_scene(
         SCENE_B.id,
-        schemas.ProjectUpdate(access=schemas.Access.PUBLIC),
+        schemas.SceneUpdate(access=schemas.Access.PUBLIC),
     )
 
     await CLIENT_A.get_els(SCENE_B.id)  # ok
