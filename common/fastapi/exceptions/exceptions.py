@@ -13,7 +13,7 @@ from pydantic_core import PydanticUndefinedType
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from common.async_client import (
-    ErrorDetails,
+    ComprehensiveErrorDetails,
     ErrorRequestInfo,
     ErrorResponseContent,
     HTTPClientException,
@@ -151,7 +151,7 @@ class ExceptionsHandlersBase:
         return await self.exception_handler(
             request,
             exc,
-            detail=ErrorDetails(
+            detail=ComprehensiveErrorDetails(
                 msg=str(exc) or str(exc.__class__.__name__),
                 items=jsonable_encoder(
                     exc.errors(),
@@ -166,7 +166,7 @@ class ExceptionsHandlersBase:
         exc: Exception,
         *,
         status_code: int | None = None,
-        detail: ErrorDetails | dict | str | list | None = None,
+        detail: ComprehensiveErrorDetails | dict | str | list | None = None,
         # log
     ):
         logger = self.get_logger(request)
@@ -332,10 +332,10 @@ class BaseHTTPException(HTTPException):
     def __init__(
         self,
         status_code: int,
-        detail: ErrorDetails | Any = None,
+        detail: ComprehensiveErrorDetails | Any = None,
         headers: dict[str, str] | None = None,
     ) -> None:
-        if isinstance(detail, ErrorDetails):
+        if isinstance(detail, ComprehensiveErrorDetails):
             detail = detail.model_dump(exclude_unset=True)
             detail = {k: v for k, v in detail.items() if v}  # exclude empty fields
 
@@ -349,12 +349,12 @@ class BaseHTTPException(HTTPException):
 
 
 class BadRequest(BaseHTTPException):
-    def __init__(self, msg: str | ErrorDetails):
+    def __init__(self, msg: str | ComprehensiveErrorDetails):
         super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
 
 
 class TokenError(BaseHTTPException):
-    def __init__(self, msg: str | ErrorDetails):
+    def __init__(self, msg: str | ComprehensiveErrorDetails):
         super().__init__(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Token error: {msg}" if isinstance(msg, str) else msg,
@@ -363,22 +363,22 @@ class TokenError(BaseHTTPException):
 
 
 class NotEnoughRights(BaseHTTPException):
-    def __init__(self, detail: str | ErrorDetails | Any):
+    def __init__(self, detail: str | ComprehensiveErrorDetails | Any):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 class NotFoundError(BaseHTTPException):
-    def __init__(self, detail: str | ErrorDetails | Any):
+    def __init__(self, detail: str | ComprehensiveErrorDetails | Any):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
 
 class ConflictError(BaseHTTPException):
-    def __init__(self, detail: str | ErrorDetails | Any):
+    def __init__(self, detail: str | ComprehensiveErrorDetails | Any):
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
 class ValidationError(BaseHTTPException):
-    def __init__(self, detail: str | ErrorDetails | Any):
+    def __init__(self, detail: str | ComprehensiveErrorDetails | Any):
         super().__init__(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=detail,

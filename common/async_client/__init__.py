@@ -7,7 +7,7 @@ if sys.version_info < (3, 11):
 
 
 from ..common import (
-    ErrorDetails,
+    ComprehensiveErrorDetails,
     ErrorRequestInfo,
     ErrorResponseContent,
     ExceptionPydanticType,

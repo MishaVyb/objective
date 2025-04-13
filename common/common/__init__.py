@@ -8,7 +8,7 @@ from ._base_client_methods import (
     TokenSchema,
 )
 from ._exceptions import (
-    ErrorDetails,
+    ComprehensiveErrorDetails,
     ErrorRequestInfo,
     ErrorResponseContent,
     ExceptionPydanticType,

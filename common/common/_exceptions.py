@@ -58,17 +58,17 @@ class _ExceptionPydanticSchema:
 ExceptionPydanticType = Annotated[BaseException, _ExceptionPydanticSchema]
 """Exception type with Pydantic support. Serializable. """
 
-DETAIL_ITEM_TYPE = Annotated[
-    Union[list, dict, Any, None],
-    BeforeValidator(lambda v: jsonable_encoder_stub(v)),
-]
 
-
-class ErrorDetails(BaseModel):
-    msg: Union[str, Any] = Field(description="Verbose error message")
-    # warning: default http exception handler (fastapi.exception_handlers.http_exception_handler)
+class ComprehensiveErrorDetails(BaseModel):
+    # NOTE
+    # default http exception handler (fastapi.exception_handlers.http_exception_handler)
     # uses plain json.dumps() to serialize the response
-    items: DETAIL_ITEM_TYPE = Field(None, description="Items causing this error")
+    msg: str = Field(description="Verbose error message")
+    items: Annotated[
+        list,
+        Field(description="Items causing this error"),
+        BeforeValidator(lambda v: jsonable_encoder_stub(v)),
+    ] = []
     original: Union[str, dict, ExceptionPydanticType, None] = Field(
         None,
         description="Any error original reason or error source",
@@ -85,7 +85,7 @@ class ErrorRequestInfo(BaseModel):
 
 
 class ErrorResponseContent(BaseModel):
-    detail: Union[ErrorDetails, str, dict, Any]
+    detail: Union[ComprehensiveErrorDetails, str, dict, Any]
     trace_id: Optional[str] = None
     trace_url: Optional[str] = None
     exception: Optional[list[str]] = None  # `exc_info`
@@ -96,10 +96,10 @@ class HTTPClientException(Exception):
     def __init__(
         self,
         status_code: int,
-        detail: Union[ErrorDetails, Any, None] = None,
+        detail: Union[ComprehensiveErrorDetails, Any, None] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> None:
-        if isinstance(detail, ErrorDetails):
+        if isinstance(detail, ComprehensiveErrorDetails):
             detail = detail.model_dump(exclude_unset=True)
             detail = {k: v for k, v in detail.items() if v}  # exclude empty fields
 
@@ -114,7 +114,9 @@ class HTTPClientException(Exception):
         return self.__repr__()
 
 
-def get_error_details(data: Union[dict, str]) -> Union[ErrorDetails, Union[dict, str]]:
+def get_error_details(
+    data: Union[dict, str],
+) -> Union[ComprehensiveErrorDetails, Union[dict, str]]:
     """Extract error details to use it from scratch in raised exception."""
     try:
         schema = ErrorResponseContent.model_validate(data)
@@ -124,12 +126,12 @@ def get_error_details(data: Union[dict, str]) -> Union[ErrorDetails, Union[dict,
         return data
 
     # extract verbose message from error content schema
-    if isinstance(schema.detail, ErrorDetails):
-        return ErrorDetails(
+    if isinstance(schema.detail, ComprehensiveErrorDetails):
+        return ComprehensiveErrorDetails(
             msg=schema.detail.msg,
             original=schema.model_dump(exclude_none=True),
         )
-    return ErrorDetails(
+    return ComprehensiveErrorDetails(
         msg=schema.detail,
         original=schema.model_dump(exclude_none=True),
     )

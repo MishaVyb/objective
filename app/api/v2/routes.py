@@ -8,6 +8,7 @@ from app.dependencies.users import AuthRouterDepends
 from app.exceptions import DeletedInstanceError
 from app.repository.repositories import DatabaseRepositoriesDepends
 from app.schemas import schemas
+from common.common._exceptions import ErrorResponseContent
 from common.fastapi.monitoring.base import LoggerDepends
 
 ########################################################################################
@@ -184,7 +185,16 @@ async def get_scene_elements(
     return await db.elements.get(scene_id, filters)
 
 
-@scenes.post("/{scene_id}/elements", status_code=status.HTTP_200_OK)
+@scenes.post(
+    "/{scene_id}/elements",
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorResponseContent,
+            "description": "Not enough rights. ",
+        },
+    },
+)
 async def reconcile_scene_elements(
     scene_id: UUID,
     db: DatabaseRepositoriesDepends,

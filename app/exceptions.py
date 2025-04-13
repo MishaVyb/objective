@@ -2,7 +2,7 @@ from typing import Any
 
 from starlette import status
 
-from common.common._exceptions import ErrorDetails
+from common.common._exceptions import ComprehensiveErrorDetails
 from common.fastapi.exceptions import (
     BadRequest,
     BaseHTTPException,
@@ -33,7 +33,11 @@ class NotFoundInstanceError(NotFoundError):
 
 
 class DeletedInstanceError(NotFoundInstanceError):
-    def __init__(self, instance: Any, detail: str | ErrorDetails | Any) -> None:
+    def __init__(
+        self,
+        instance: Any,
+        detail: str | ComprehensiveErrorDetails | Any,
+    ) -> None:
         self.instance = instance
         super().__init__(detail)
 

@@ -17,6 +17,7 @@ from typing_extensions import deprecated
 from app.config import AppSettings
 from app.repository.users import UserRepository
 from app.schemas.schemas import FiltersBase
+from common.common._exceptions import ComprehensiveErrorDetails
 from common.fastapi.exceptions.exceptions import NotEnoughRights, NotFoundError
 from common.repo.sqlalchemy import (
     _CLASS_DEFAULT,
@@ -168,7 +169,12 @@ class ProjectsScenesServicesRepositoryBase(
             pk, payload, options, flush, refresh, **extra_values
         )
         if not await self.check_update_rights(instance, payload):
-            raise NotEnoughRights(f"Not enough rights to update: {instance}")
+            raise NotEnoughRights(
+                ComprehensiveErrorDetails(
+                    msg=f"Not enough rights to update: {instance}",
+                    items=[instance],
+                ),
+            )
         return instance
 
     async def pending_create(
