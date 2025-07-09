@@ -30,7 +30,6 @@ repos:
     entry: poetry run autoflake
     language: system
     types: [python]
-    args: [--in-place, --remove-all-unused-imports, --remove-duplicate-keys, --ignore-init-module-imports]
 
   - id: black
     name: Format with Black
@@ -43,22 +42,3 @@ repos:
     entry: poetry run isort
     language: system
     types: [python]
-
-  # DISABLED: black does all we need
-  # - id: flake8
-  #   name: Check with Flake8
-  #   entry: poetry run flake8
-  #   language: system
-  #   pass_filenames: false
-  #   types: [python]
-  #   args: [--count, .]
-
-  # DISABLED: check on GitHub Actions (allows local commits before pushing without mypy)
-  # - id: mypy
-  #   name: Validate types with MyPy
-  #   entry: poetry run mypy
-  #   language: system
-  #   types: [python]
-  #   pass_filenames: false
-  #   args:
-  #   - "objective"
