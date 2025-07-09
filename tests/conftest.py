@@ -79,6 +79,8 @@ def settings(request: pytest.FixtureRequest) -> AppSettings:
     if request.config.option.postgres:
         settings = AppSettings(
             DATABASE_NAME=f"objective_pytest_{datetime.now()}",
+            APP_ENVIRONMENT="dev",
+            USERS_SECRET=SecretStr("USERS_SECRET"),
             **common,
         )
         assert settings.DATABASE_URL.drivername == AsyncDatabaseDriver.POSTGRES
@@ -91,6 +93,8 @@ def settings(request: pytest.FixtureRequest) -> AppSettings:
             DATABASE_HOST=None,
             DATABASE_PORT=None,
             DATABASE_NAME=":memory:",
+            APP_ENVIRONMENT="dev",
+            USERS_SECRET=SecretStr("USERS_SECRET"),
             **common,
         )
 
@@ -131,7 +135,6 @@ async def setup_tables(
     if request.config.option.alembic:
         async with create_and_drop_tables_by_alembic(engine, settings):
             yield
-
     else:
         async with create_and_drop_tables_by_metadata(engine, Base.metadata):
             yield
