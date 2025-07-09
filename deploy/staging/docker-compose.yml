@@ -1,0 +1,72 @@
+# STAGING
+
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16.2-bullseye
+    hostname: db
+    ports:
+    - "5434:5432"   # NOTE: we bind 5434 to avoid conflicts with popular 5432 port
+    env_file:
+    - ./.env
+    volumes:
+    - objective_database_staging:/var/lib/postgresql/data
+
+    restart: always
+    healthcheck:
+      test: pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  migrator:
+    image: objective:staging
+    restart: "no"
+    command: alembic upgrade head
+    env_file:
+    - ./.env
+    environment:
+      OBJECTIVE_DB_HOST: db
+      OBJECTIVE_DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.19.3
+    ports:
+    - "8008:80"
+    volumes:
+    - type: bind
+      source: ./nginx.conf
+      target: /etc/nginx/conf.d/default.conf
+
+    # frontend build
+    - type: bind
+      source: ./build
+      target: /usr/share/nginx/html/
+
+    depends_on:
+    - migrator
+
+  api:
+    image: objective:staging
+    restart: always
+
+    ports:
+    - "8010:8000" # NOTE: objective.services:8010/api/docs
+
+    env_file:
+    - ./.env
+    environment:
+      OBJECTIVE_HOST: 0.0.0.0
+      OBJECTIVE_DB_HOST: db
+      OBJECTIVE_DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  objective_database_staging:
+    name: objective_database_staging

@@ -1,0 +1,123 @@
+[tool.poetry]
+name = "objective"
+version = "0.1.0"
+description = ""
+authors = []
+maintainers = []
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.108.0"
+uvicorn = { version = "^0.22.0", extras = ["standard"] }
+fastapi-users = "^12.1.2"
+httpx-oauth = "^0.10.2"
+fastapi-users-db-sqlalchemy = "^6.0.1"
+pydantic = "^2"
+pydantic-settings = "^2"
+ujson = "^5.8.0"
+SQLAlchemy = { version = "^2.0.18", extras = ["asyncio"] }
+alembic = "^1.11.1"
+asyncpg = { version = "^0.28.0", extras = ["sa"] }
+aiofiles = "^23.1.0"
+httptools = "^0.6.0"
+sentry-sdk = { extras = ["fastapi"], version = "^1.40.0" }
+pytest-mock = "^3.14.0"
+setuptools = "^74.0.0"
+
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.2.1"
+flake8 = "~4.0.1"
+isort = "^5.11.4"
+pre-commit = "^3.0.1"
+black = "^22.12.0"
+autoflake = "^1.6.1"
+pytest-cov = "^4.0.0"
+anyio = "^3.6.2"
+pytest-env = "^0.8.1"
+httpx = "^0.23.3"
+
+[tool.poetry.group.dev.dependencies]
+asgi-lifespan = "^2.1.0"
+mypy = "^1.5.1"
+schemathesis = "^3.20.2"
+pyright = "^1.1.344"
+dirty-equals = "^0.8.0"
+debugpy = "^1.8.5"
+aiosqlite = "^0.20.0"
+pytest-xdist = "^3.6.1"
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+
+[tool.pydantic-mypy]
+# https://docs.pydantic.dev/latest/integrations/mypy/#configuring-the-plugin
+init_forbid_extra = false
+init_typed = false
+warn_required_dynamic_aliases = true
+
+
+[tool.mypy]
+# TO DISABLE PLUGIN GLOBALLY - GO TO EXTENSIONS AND DISABLE MYPY EXTENSION. OR HERE:
+# ignore_errors = true # DISABLE
+
+python_version = "3.11"
+# plugins = "pydantic.mypy"
+plugins = "common.mypy"
+
+
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+ignore_missing_imports = true
+# follow_imports = "skip"       # !!!
+follow_imports = "silent" # !!!
+
+# NOTE: I`ve decided, that it`s better to use:
+#   foo: type | None = None
+# Because, for Pydantic, when we are not specifying `None` annotation explicitly,
+# it may cause error on validation round trip
+implicit_optional = false
+
+# DISABLE SOME ERROR CODES (that are enabled by default):
+allow_redefinition = true
+disable_error_code = [
+    #https://mypy.readthedocs.io/en/stable/error_code_list.html#require-annotation-if-variable-type-is-unclear-var-annotated
+    "var-annotated", # allows: foo = [], bar = {}
+    "override",
+    "assignment",
+    "misc",
+    "truthy-bool",   # allows for optional pydantic fields declared via ModelConstructor
+]
+
+# ENABLE SOME ERROR CODES (that are turned off by default)
+# strict = true # 📍 Enable all optional error checking flags
+
+check_untyped_defs = true
+# disallow_untyped_defs = true
+strict_equality = true
+warn_unreachable = true
+# implicit_reexport = false # breaks down __init__ module logic...
+
+enable_error_code = [
+    "redundant-expr",
+    "possibly-undefined",
+    "truthy-bool",
+    "truthy-iterable",
+    "unused-awaitable",
+]
+
+
+[tool.pytest.ini_options]
+addopts = "--failed-first --durations=10 --disable-warnings --show-capture=no"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+
+    # triggers sometime because of many workers pytest-dist session run:
+    "ignore::ResourceWarning",
+    "ignore::pluggy.PluggyTeardownRaisedWarning",
+]
