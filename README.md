@@ -5,7 +5,7 @@
 <br />
 <div align="center">
     <a href="https://objective.services">
-        <img src="https://github.com/user-attachments/assets/0b2d5166-d5d8-446c-a1c7-00a8b1287cfd" alt="Logo" width="200" height="200">
+        <img src="https://github.com/user-attachments/assets/0b2d5166-d5d8-446c-a1c7-00a8b1287cfd" alt="Logo" width="600">
     </a>
 
 <h3 align="center">Objective REST API.</h3>
