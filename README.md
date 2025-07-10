@@ -4,9 +4,9 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://objective.services">
-    <img src="https://github.com/user-attachments/assets/0b2d5166-d5d8-446c-a1c7-00a8b1287cfd" alt="Logo">
-  </a>
+    <a href="https://objective.services">
+        <img src="https://github.com/user-attachments/assets/0b2d5166-d5d8-446c-a1c7-00a8b1287cfd" alt="Logo" width="200" height="200">
+    </a>
 
 <h3 align="center">Objective REST API.</h3>
 
@@ -18,10 +18,8 @@
   </p>
 </div>
 
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Test workflow](https://github.com/MishaVyb/bart-bot/actions/workflows/tests.yml/badge.svg)](https://github.com/MishaVyb/objective/actions/workflows/tests.yml)
 
-## Built With
+[![Test workflow](https://github.com/MishaVyb/bart-bot/actions/workflows/tests.yml/badge.svg)](https://github.com/MishaVyb/objective/actions/workflows/tests.yml)
 
 ![](https://img.shields.io/badge/python-3.11-blue)
 ![](https://img.shields.io/badge/httpx-0.23.3-blue)
@@ -29,6 +27,7 @@
 ![](https://img.shields.io/badge/pydantic-2.0-blue)
 ![](https://img.shields.io/badge/SQLAlchemy-2.0.18-blue)
 ![](https://img.shields.io/badge/pytest-7.2.1-blue)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 <br>
 
 ## Purpose
