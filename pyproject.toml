@@ -59,7 +59,8 @@ warn_required_dynamic_aliases = true
 
 
 [tool.mypy]
-# ignore_errors = true # DISABLE FLAG
+ignore_errors = false
+explicit_package_bases = true
 
 python_version = "3.11"
 plugins = "common.mypy"
@@ -91,6 +92,10 @@ disable_error_code = [
     "misc",
     "truthy-bool",   # allows for optional pydantic fields declared via ModelConstructor
 ]
+
+[[tool.mypy.overrides]]
+module = "common.*"
+ignore_errors = true
 
 
 [tool.pytest.ini_options]

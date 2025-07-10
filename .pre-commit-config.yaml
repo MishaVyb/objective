@@ -25,6 +25,13 @@ repos:
 
 - repo: local
   hooks:
+  - id: check-poetry-version
+    name: Check Poetry Version
+    entry: bash pre-commit-check-poetry.sh
+    language: system
+    types: [python]
+    pass_filenames: false
+
   - id: autoflake
     name: autoflake
     entry: poetry run autoflake

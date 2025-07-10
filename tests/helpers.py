@@ -346,7 +346,7 @@ async def drop_database(url: URL | str):
     )
     async with default_postgres.begin() as conn:
         # disconnect all users from the database we are dropping.
-        version = conn.dialect.server_version_info
+        version = conn.dialect.server_version_info or (1, 0)
         pid_column = "pid" if (version >= (9, 2)) else "procpid"
         sql = f"""
             SELECT pg_terminate_backend(pg_stat_activity.{pid_column})
