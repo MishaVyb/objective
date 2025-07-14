@@ -1,24 +1,8 @@
-name: Testing objective
+name: Pytest
 
 on: push
 
 jobs:
-  mypy:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.11'
-    - name: Install deps
-      uses: knowsuchagency/poetry-install@v1
-      env:
-        POETRY_VIRTUALENVS_CREATE: false
-        # Set PYTHONPATH so mypy can find the custom "common.mypy" plugin under the root dir:
-        PYTHONPATH: .
-    - name: Run mypy check
-      run: poetry run mypy .
   pytest:
     runs-on: ubuntu-latest
     services:
