@@ -19,7 +19,8 @@
 </div>
 
 
-[![Test workflow](https://github.com/MishaVyb/bart-bot/actions/workflows/tests.yml/badge.svg)](https://github.com/MishaVyb/objective/actions/workflows/tests.yml)
+[![Test workflow](https://github.com/MishaVyb/objective/actions/workflows/pytest.yml/badge.svg)](https://github.com/MishaVyb/objective/actions/workflows/pytest.yml)
+[![Test workflow](https://github.com/MishaVyb/objective/actions/workflows/mypy.yml/badge.svg)](https://github.com/MishaVyb/objective/actions/workflows/mypy.yml)
 
 ![](https://img.shields.io/badge/python-3.11-blue)
 ![](https://img.shields.io/badge/httpx-0.23.3-blue)
