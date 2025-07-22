@@ -1,4 +1,4 @@
-# PRODUCTION
+# LOCAL DEV
 
 version: "3.9"
 
@@ -11,7 +11,7 @@ services:
     env_file:
     - ./.env
     volumes:
-    - objective_database_prod:/var/lib/postgresql/data
+    - objective_database_dev:/var/lib/postgresql/data
 
     restart: always
     healthcheck:
@@ -21,7 +21,7 @@ services:
       retries: 40
 
   migrator:
-    image: objective:prod
+    image: objective:dev
     restart: "no"
     command: alembic upgrade head
     env_file:
@@ -47,8 +47,8 @@ services:
   nginx:
     image: nginx:1.19.3
     ports:
-    - "80:80"
-    - "443:443"
+    - "9001:9001" # mock connection for objective.services:80/443
+    - "9002:9002" # mock connection for staging.objective.services:80/443
     volumes:
     - type: bind
       source: ./nginx.conf
@@ -77,10 +77,10 @@ services:
     - migrator
 
   api:
-    image: objective:prod
+    image: objective:dev
     ports:
       # NOTE
-      # for debug or local dev purposes we bind 8000, but nginx 80/443 is used for production
+      # for debug or local dev proposes we bind 8000, but nginx 80/443 is used for production
     - "8000:8000"
     restart: always
     env_file:
@@ -94,5 +94,5 @@ services:
         condition: service_healthy
 
 volumes:
-  objective_database_prod:
-    name: objective_database_prod
+  objective_database_dev:
+    name: objective_database_dev

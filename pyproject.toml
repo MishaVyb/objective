@@ -24,6 +24,7 @@ httptools = "^0.6.0"
 sentry-sdk = { extras = ["fastapi"], version = "^1.40.0" }
 pytest-mock = "^3.14.0"
 setuptools = "^74.0.0"
+yarl = "^1.20.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -114,3 +115,7 @@ in-place = true
 remove-all-unused-imports = true
 remove-duplicate-keys = true
 ignore-init-module-imports = true
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -25,6 +25,7 @@ class AppSettings(BaseSettings, VerboseModel):
         validate_default=True,
         validate_return=True,
         frozen=True,
+        extra="allow",
     )
 
     SERVICE_DIR: Path = Path(__file__).resolve().parent.parent
@@ -74,12 +75,12 @@ class AppSettings(BaseSettings, VerboseModel):
             f"{self.APP_NAME}@{self.APP_VERSION}" if self.APP_VERSION else self.APP_NAME
         )
 
-    DATABASE_DRIVER: AsyncDatabaseDriver = AsyncDatabaseDriver.SQLITE
-    DATABASE_USER: SecretStr | None = None
-    DATABASE_PASSWORD: SecretStr | None = None
-    DATABASE_HOST: str | None = None
-    DATABASE_PORT: int | None = None
-    DATABASE_NAME: str = "objective"
+    DATABASE_DRIVER: AsyncDatabaseDriver
+    DATABASE_USER: SecretStr
+    DATABASE_PASSWORD: SecretStr
+    DATABASE_HOST: str | None
+    DATABASE_PORT: int | None
+    DATABASE_NAME: str
 
     @property
     def DATABASE_URL(self):

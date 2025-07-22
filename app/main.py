@@ -60,7 +60,8 @@ def main() -> None:
     # setup logging for main process
     setup_logging(settings)
     logger.info("Run %s (%s)", settings.APP_NAME, settings.APP_VERSION)
-    logger.debug("Settings: %s", settings)
+    logger.info("Settings: %s", settings)
+    logger.debug("Other env variables: %s", settings.model_extra)
 
     uvicorn.run(
         "app.main:setup",
