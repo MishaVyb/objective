@@ -234,7 +234,12 @@ class ExceptionsHandlersBase:
             exception=exc_info,
             request=self.get_request_info(request),
         )
-        return await self.finalize_response(content, status_code, debug=debug)
+        return await self.finalize_response(
+            content,
+            status_code,
+            debug=debug,
+            request=request,
+        )
 
     def get_request_info(self, request: Request):
         try:
@@ -255,7 +260,13 @@ class ExceptionsHandlersBase:
         content: ErrorResponseContent,
         status_code: int,
         debug: bool,
+        request: Request,
     ):
+        headers = dict(self.headers) if self.headers else {}
+        origin = request.headers.get("Origin")
+        if origin:
+            headers["Access-Control-Allow-Origin"] = origin
+
         return JSONResponse(
             jsonable_encoder(
                 content,
@@ -264,7 +275,7 @@ class ExceptionsHandlersBase:
                 custom_encoder=self.custom_encoder,
             ),
             status_code,
-            headers=dict(self.headers) if self.headers else None,
+            headers=headers,
         )
 
 
@@ -301,6 +312,7 @@ class SentryExceptionsHandlers(ExceptionsHandlersBase):
         content: ErrorResponseContent,
         status_code: int,
         debug: bool,
+        request: Request,
     ):
         span = sentry_sdk.get_current_span()
         if span and debug:
@@ -325,7 +337,12 @@ class SentryExceptionsHandlers(ExceptionsHandlersBase):
                 ),
             },
         )
-        return await super().finalize_response(content, status_code, debug=debug)
+        return await super().finalize_response(
+            content,
+            status_code,
+            debug=debug,
+            request=request,
+        )
 
 
 class BaseHTTPException(HTTPException):

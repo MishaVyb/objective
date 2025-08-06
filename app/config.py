@@ -41,7 +41,7 @@ class AppSettings(BaseSettings, VerboseModel):
     APP_WORKERS: int | None = None
     APP_RELOAD: bool = False
 
-    APP_CORS_SETTINGS: dict = {}
+    APP_CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     APP_RAISE_SERVER_EXCEPTIONS: bool | list[int] = False  # for debugging only
     APP_VERBOSE_EXCEPTIONS: bool = True
     APP_DEBUG_FREEZE: float | None = None

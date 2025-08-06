@@ -130,30 +130,12 @@ class ObjectiveAPP(FastAPI):
         app.add_middleware(JournalRecordMiddleware, access_log=True)
         app.add_middleware(SentryLoggerMiddleware, name=__name__)
 
-        # NOTE:
-        # do not use wildcards, because it doesn't allows any authorization
+        # WARNING:
+        # do not use wildcards, it doesn't allows any authorization
         # https://fastapi.tiangolo.com/tutorial/cors/#wildcards
-
-        # TODO settings .env
-        if settings.APP_ENVIRONMENT == "dev":
-            # NOTE
-            # 'Access-Control-Allow-Origin' header cannot contains multiple values
-            origins = [
-                "http://localhost:3000",
-            ]
-
-        elif settings.APP_ENVIRONMENT == "staging":
-            origins = ["http://staging.objective.services"]
-
-        elif settings.APP_ENVIRONMENT == "production":
-            origins = ["http://objective.services"]
-
-        else:
-            raise ValueError
-
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=origins,
+            allow_origins=settings.APP_CORS_ORIGINS,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
@@ -171,7 +153,9 @@ class ObjectiveAPP(FastAPI):
             # NOTE: workaround to handle CORS issue of error response
             # https://github.com/tiangolo/fastapi/discussions/7319
             headers={
-                "Access-Control-Allow-Origin": ", ".join(origins),
+                # NOTE
+                # 'Access-Control-Allow-Origin' header cannot contains multiple values
+                # it well be set by the middleware depending on the request 'Origin' header
                 "Access-Control-Allow-Credentials": "true",
                 "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type, Authorization",
