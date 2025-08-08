@@ -33,7 +33,7 @@ from tests.helpers import (
     drop_database,
 )
 
-logger = logging.getLogger("conftest")
+logger = logging.getLogger("conftest")  #
 
 
 @pytest.fixture(autouse=True)
