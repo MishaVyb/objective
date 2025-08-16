@@ -7,7 +7,7 @@ services:
     image: postgres:16.2-bullseye
     hostname: db
     ports:
-    - "5433:5432"   # NOTE: we bind 5433 to avoid conflicts with popular 5432 port
+    - "5435:5432"   # NOTE: we bind 5435 to avoid conflicts with popular 5432 port
     env_file:
     - ./.env
     volumes:
@@ -80,8 +80,8 @@ services:
     image: objective:dev
     ports:
       # NOTE
-      # for debug or local dev proposes we bind 8000, but nginx 80/443 is used for production
-    - "8000:8000"
+      # for debug or local dev proposes we bind 8020, but nginx 80/443 is used for production
+    - "8020:8000"
     restart: always
     env_file:
     - ./.env
