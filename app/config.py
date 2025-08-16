@@ -34,7 +34,7 @@ class AppSettings(BaseSettings, VerboseModel):
 
     APP_NAME: str = "Objective"
     APP_DESCRIPTION: str = "Plan your shooting objectively"
-    APP_VERSION: str = "1.0.0.0"
+    APP_VERSION: str = Field(default="1.0.0.0", alias="OBJECTIVE_VERSION")
 
     APP_PORT: int = 8000
     APP_HOST: str = "0.0.0.0"
