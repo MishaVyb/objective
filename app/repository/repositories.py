@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import time
 import uuid
 from dataclasses import dataclass, fields
@@ -60,6 +61,23 @@ class ServiceRepositoryBase(
         if is_deleted:
             raise NotImplementedError
         return super()._use_filters(filters, **extra_filters)
+
+    @contextlib.asynccontextmanager
+    async def _scene_lock(self, scene_id: uuid.UUID, ignore_lock: bool = False):
+
+        # FIXME
+        # implement lock via database (ie SELECT scene FOR UPDATE)
+        # because there are might be several app instances (later)...
+        if ignore_lock:
+            yield
+            return
+
+        self.app.state.scene_locks.setdefault(scene_id, asyncio.Lock())
+        lock = self.app.state.scene_locks[scene_id]
+        if lock.locked():
+            self.logger.warning("Scene is locked: %s. Wait for release. ", scene_id)
+        async with lock:
+            yield lock
 
 
 _EntitySchemaType = TypeVar(
@@ -463,40 +481,45 @@ class SceneSimplifiedRepository(
         options: Sequence[ORMOption] = _CLASS_DEFAULT,
         flush: bool = False,
         refresh: bool = False,
+        ignore_lock: bool = False,
         **extra_values,
     ) -> schemas.SceneWithProject:
-        if payload and payload.project_id:
-            # NOTE
-            # on MoveTo scene takes access and author from project to simplify permissions validation
-            project = await self.db.projects.get(payload.project_id, refresh=True)
-            extra_values["access"] = project.access
-            extra_values["created_by_id"] = project.created_by_id
+        async with self._scene_lock(pk, ignore_lock=ignore_lock):
+            if payload and payload.project_id:
+                # NOTE
+                # on MoveTo scene takes access and author from project to simplify permissions validation
+                project = await self.db.projects.get(payload.project_id, refresh=True)
+                extra_values["access"] = project.access
+                extra_values["created_by_id"] = project.created_by_id
 
-        instance = await super().update(
-            pk, payload, options, flush, refresh, **extra_values
-        )
+            instance = await super().update(
+                pk, payload, options, flush, refresh, **extra_values
+            )
 
-        # handle relationship
-        if payload and payload.files is not None:
+            # handle relationship
+            if payload and payload.files is not None:
 
-            # delete many-to-many association
-            await self.db.files_to_scenes.delete_by(scene_id=instance.id)
+                # delete many-to-many association
+                await self.db.files_to_scenes.delete_by(scene_id=instance.id)
 
-            # delete render file itself
-            for render in instance.files:
-                if render.id not in payload.files:
-                    await self.db.files.delete(render.id)  # type: ignore
+                # delete render file itself
+                for render in instance.files:
+                    if render.id not in payload.files:
+                        await self.db.files.delete(render.id)  # type: ignore
 
-            # creating new
-            for file_id in payload.files:
-                if not await self.db.files.exist_where(id=file_id):
-                    raise NotFoundError(f"File does not exist: {file_id}")
-                await self.db.files_to_scenes.pending_create(
-                    schemas.FileToSceneInternal(file_id=file_id, scene_id=instance.id),
-                )
+                # creating new
+                for file_id in payload.files:
+                    if not await self.db.files.exist_where(id=file_id):
+                        raise NotFoundError(f"File does not exist: {file_id}")
+                    await self.db.files_to_scenes.create(
+                        schemas.FileToSceneInternal(
+                            file_id=file_id,
+                            scene_id=instance.id,
+                        ),
+                    )
 
-        await self.flush([pk])
-        return await self.get(pk, refresh=True)
+            await self.flush([pk])
+            return await self.get(pk, refresh=True)
 
     async def inform_mutation(self, pk: uuid.UUID) -> None:
         await self.update(
@@ -504,6 +527,7 @@ class SceneSimplifiedRepository(
             # remove render, as they are not actual anymore:
             schemas.SceneUpdate(files=[]),
             updated_at=datetime.now(timezone.utc),
+            ignore_lock=True,
         )
 
     async def check_update_rights(
@@ -586,14 +610,7 @@ class ElementRepository(
         # loose other client updates as 'next_sync_token' is defined
         # only after all current update will be handled (not before in order to not
         # respond with the same elements on next reconcile request)
-        # FIXME
-        # implement lock via database (ie SELECT scene FOR UPDATE)
-        # because there are might be several app instances...
-        self.app.state.scene_locks.setdefault(scene_id, asyncio.Lock())
-        lock = self.app.state.scene_locks[scene_id]
-        if lock.locked():
-            self.logger.warning("Scene is locked. Wait for release.")
-        async with lock:
+        async with self._scene_lock(scene_id):
             return schemas.ReconcileElementsResponse.model_construct(
                 items=await self._reconcile(scene_id, payload, filters),
                 next_sync_token=time.time(),

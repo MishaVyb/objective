@@ -228,7 +228,7 @@ FileID = Annotated[str, ...]
 class FileKind(StrEnum):
     IMAGE = "image"
     THUMBNAIL = "thumbnail"
-    RENDER = "render"
+    EXPORT = "export"
 
 
 class FileSimplified(DeclarativeSchemaBase):

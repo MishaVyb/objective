@@ -529,6 +529,46 @@ async def test_files_crud(client: ObjectiveClient) -> None:
     assert project.scenes[0].files == []
 
 
+async def test_files_crud_race_condition(client: ObjectiveClient) -> None:
+    PROJECT = (await client.get_projects()).items[0]
+    SCENE = (await client.get_scenes()).items[0]
+
+    payload = schemas.FileCreate(
+        id="file_1",
+        data="data_1",
+        type="image/png",
+        kind=schemas.FileKind.THUMBNAIL,
+    )
+    async with TaskGroup() as group:
+        coro1 = client.create_file(payload)
+        coro2 = client.create_file(payload)
+        t1 = group.create_task(coro1)
+        t2 = group.create_task(coro2)
+
+    res_1 = t1.result()
+    res_2 = t2.result()
+    assert res_1.id == "file_1"
+    assert res_2.id == "file_1"
+
+    res = await client.get_file("file_1")
+    assert res.id == "file_1"
+
+    async with TaskGroup() as group:
+        p = schemas.SceneUpdate(files=["file_1"])
+        _coro1 = client.update_scene(SCENE.id, p)
+        _coro2 = client.update_scene(SCENE.id, p)
+        _t1 = group.create_task(_coro1)
+        _t2 = group.create_task(_coro2)
+
+    _res_1 = _t1.result()
+    _res_2 = _t2.result()
+    assert _res_1.files == [IsPartialSchema(id="file_1")]
+    assert _res_2.files == [IsPartialSchema(id="file_1")]
+
+    res = await client.get_scene(SCENE.id)
+    assert res.files == [IsPartialSchema(id="file_1")]
+
+
 async def test_scene_filters_is_deleted(client: ObjectiveClient) -> None:
     # arrange:
     PROJECT = (await client.get_projects()).items[0]

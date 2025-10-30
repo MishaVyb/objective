@@ -121,6 +121,7 @@ class JournalRecordMiddleware(BaseHTTPMiddleware):
                 pformat(journal_data, sort_dicts=False, width=150),
             )
 
+        response_result = None
         try:
             start_time = time.time()
             response = await call_next(request)

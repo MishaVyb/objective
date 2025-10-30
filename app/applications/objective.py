@@ -60,7 +60,7 @@ async def lifespan(app: ObjectiveAPP):
         expire_on_commit=False,  # FIXME db repos should return Pydantic only
     )
     app.state.scene_locks = {}
-
+    app.state.file_locks = {}
     try:
         yield
     finally:
@@ -95,6 +95,7 @@ class ObjectiveAPP(FastAPI):
             session_maker: async_sessionmaker[AsyncSession]
 
             scene_locks: dict[uuid.UUID, asyncio.Lock]
+            file_locks: dict[schemas.FileID, asyncio.Lock]
 
         state: State
 

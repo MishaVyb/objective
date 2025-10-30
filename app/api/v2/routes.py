@@ -1,9 +1,11 @@
+import asyncio
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette import status
 
+from app.dependencies.dependencies import AppDepends
 from app.dependencies.users import AuthRouterDepends
 from app.exceptions import DeletedInstanceError
 from app.repository.repositories import DatabaseRepositoriesDepends
@@ -224,6 +226,7 @@ async def get_file(
 
 @files.post("", status_code=status.HTTP_201_CREATED)
 async def create_file(
+    app: AppDepends,
     db: DatabaseRepositoriesDepends,
     logger: LoggerDepends,
     *,
@@ -236,8 +239,15 @@ async def create_file(
     #  and its render files (i.e. thumbnail, etc) has the same file_id
     # - when user add thumbnail/render file directly to the scene canvas
     # (in that case we do not change file kind)
-    if file := await db.files.get_one_or_none(id=payload.id):
-        logger.warning("Duplicate file id: %s. File already exist. ", file.id)
-        return file
 
-    return await db.files.create(payload)
+    app.state.file_locks.setdefault(payload.id, asyncio.Lock())
+    lock = app.state.file_locks[payload.id]
+    if lock.locked():
+        logger.warning("File locked: %s. Wait for release. ", payload.id)
+    async with lock:
+
+        if file := await db.files.get_one_or_none(id=payload.id):
+            logger.warning("Duplicate file id: %s. File already exist. ", file.id)
+            return file
+
+        return await db.files.create(payload)
