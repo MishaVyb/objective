@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 def setup_initial_scenes(app: ObjectiveAPP) -> None:
     scenes = []
-    for filepath in app.state.settings.USERS_INITIAL_SCENES:
+    for filepath in app.state.settings.APP_INITIAL_SCENES:
         with open(filepath) as file:
             scene = schemas.SceneJsonFilePersistence.model_validate_json(file.read())
             scenes.append(scene)

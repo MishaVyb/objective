@@ -319,8 +319,11 @@ class ProjectRepository(
     DEFAULT_SCENE_NAME = "Untitled Scene"
 
     @deprecated("")
-    async def create_default(self) -> schemas.Project:
+    async def create_default(self) -> schemas.Project | None:
         initial = self.app.state.initial_scenes
+        if not initial:
+            return None
+
         return await self.create(
             schemas.ProjectCreate(name=self.DEFAULT_PROJECT_NAME),
             scenes=[scene for scene in initial],

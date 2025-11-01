@@ -74,6 +74,7 @@ def settings(request: pytest.FixtureRequest) -> AppSettings:
         APP_RAISE_SERVER_EXCEPTIONS=True,
         LOG_LEVEL=LogLevel.DEBUG,
         APP_DEBUG_FREEZE=None,
+        APP_INITIAL_SCENES_ENABLED=True,
     )
 
     if request.config.option.postgres:

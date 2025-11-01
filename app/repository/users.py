@@ -67,7 +67,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[models.User, uuid.UUID]):
         self,
         user: models.User,
         request: Request,
-    ) -> schemas.Project:
+    ) -> schemas.Project | None:
         # as there are no Request user, populate current user after registration
         request.state.current_user = user
         return await self.db.projects.create_default()

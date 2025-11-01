@@ -46,6 +46,17 @@ class AppSettings(BaseSettings, VerboseModel):
     APP_VERBOSE_EXCEPTIONS: bool = True
     APP_DEBUG_FREEZE: float | None = None
 
+    APP_INITIAL_SCENES_ENABLED: bool = True
+
+    @property
+    def APP_INITIAL_SCENES(self) -> list[Path]:
+        if not self.APP_INITIAL_SCENES_ENABLED:
+            return []
+        return [
+            self.SERVICE_DIR / "data/scenes/ParisTexas.objective",
+            self.SERVICE_DIR / "data/scenes/Sicario.objective",
+        ]
+
     API_PREFIX: URL = "/api"
 
     @property
@@ -112,13 +123,6 @@ class AppSettings(BaseSettings, VerboseModel):
 
     USERS_SECRET: SecretStr = Field(min_length=10)
     USERS_TOKEN_LIFETIME: int = 3600 * 24 * 14  # 14 days
-
-    @property
-    def USERS_INITIAL_SCENES(self) -> list[Path]:
-        return [
-            self.SERVICE_DIR / "data/scenes/ParisTexas.objective",
-            self.SERVICE_DIR / "data/scenes/Sicario.objective",
-        ]
 
     LOG_LEVEL: LogLevel = LogLevel.INFO
     LOG_HANDLERS: list[str] = ["console", "file"]
