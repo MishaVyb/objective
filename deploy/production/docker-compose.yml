@@ -4,7 +4,6 @@ version: "3.9"
 
 services:
   db:
-    # container_name: name
     image: postgres:16.2-bullseye
     hostname: db
     ports:
@@ -28,8 +27,8 @@ services:
     env_file:
     - ./.env
     environment:
-      OBJECTIVE_DB_HOST: db
-      OBJECTIVE_DB_PORT: 5432
+      OBJECTIVE_DATABASE_HOST: db
+      OBJECTIVE_DATABASE_PORT: 5432
     depends_on:
       db:
         condition: service_healthy
@@ -81,15 +80,15 @@ services:
     image: objective:prod
     ports:
       # NOTE
-      # for debug or local dev porpuses we bind 8000, but nginx 80/443 is used for production
+      # for debug or local dev purposes we bind 8000, but nginx 80/443 is used for production
     - "8000:8000"
     restart: always
     env_file:
     - ./.env
     environment:
       OBJECTIVE_HOST: 0.0.0.0
-      OBJECTIVE_DB_HOST: db
-      OBJECTIVE_DB_PORT: 5432
+      OBJECTIVE_DATABASE_HOST: db
+      OBJECTIVE_DATABASE_PORT: 5432
     depends_on:
       db:
         condition: service_healthy

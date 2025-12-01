@@ -27,8 +27,8 @@ services:
     env_file:
     - ./.env
     environment:
-      OBJECTIVE_DB_HOST: db
-      OBJECTIVE_DB_PORT: 5432
+      OBJECTIVE_DATABASE_HOST: db
+      OBJECTIVE_DATABASE_PORT: 5432
     depends_on:
       db:
         condition: service_healthy
@@ -55,14 +55,14 @@ services:
     restart: always
 
     ports:
-    - "8010:8000" # NOTE: objective.services:8010/api/docs
+    - "8010:8000" # NOTE: direct access for api bypassing nginx: staging.objective.services:8010/api/docs
 
     env_file:
     - ./.env
     environment:
       OBJECTIVE_HOST: 0.0.0.0
-      OBJECTIVE_DB_HOST: db
-      OBJECTIVE_DB_PORT: 5432
+      OBJECTIVE_DATABASE_HOST: db
+      OBJECTIVE_DATABASE_PORT: 5432
     depends_on:
       db:
         condition: service_healthy

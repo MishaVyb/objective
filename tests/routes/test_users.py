@@ -1,25 +1,35 @@
 import pytest
-from httpx import AsyncClient
 from starlette import status
-from tests.conftest import ClientsFixture
+
+from app.client import ObjectiveClient
+from tests.conftest import TEST_USERS
 
 pytestmark = [
     pytest.mark.anyio,
-    pytest.mark.usefixtures("session"),
 ]
 
 
-async def test_auth_register(clients: ClientsFixture) -> None:
+async def test_auth_register(client: ObjectiveClient) -> None:
     data = {
         "email": "user@example.com",
         "password": "string",
         "username": "string",
         "role": "string",
+        #
+        # omitted fields:
+        "is_superuser": True,
+        "is_verified": True,
     }
-    response = await clients.no_auth.post("/api/auth/register", json=data)
+    response = await client._session.post("/api/v2/auth/register", json=data)
     assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["email"] == "user@example.com"
+
+    # omitted fields:
+    # (these fields can be set only at db directly)
+    assert response.json()["isSuperuser"] is False
+    assert response.json()["isVerified"] is False
 
 
-async def test_users_me(client: AsyncClient) -> None:
-    response = await client.get("/api/users/me")
-    assert response.status_code == status.HTTP_200_OK
+async def test_users_me(client: ObjectiveClient) -> None:
+    result = await client.get_user_me()
+    assert result.username == TEST_USERS[1].username

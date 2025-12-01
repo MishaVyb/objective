@@ -5,13 +5,15 @@ RUN apt-get update && apt-get install -y \
   && rm -rf /var/lib/apt/lists/*
 
 
-RUN pip install poetry==1.4.2
+RUN pip install poetry==2.1.3
 
 # Configuring poetry
 RUN poetry config virtualenvs.create false
 
-# Copying requirements of a project
+# Copying requirements of a project to /app/src
 COPY pyproject.toml poetry.lock /app/src/
+
+# Set workdir
 WORKDIR /app/src
 
 # Installing requirements
@@ -29,4 +31,7 @@ RUN poetry install --only main
 ARG OBJECTIVE_VERSION=1.0.0
 ENV OBJECTIVE_VERSION=$OBJECTIVE_VERSION
 
-CMD ["/usr/local/bin/python", "-m", "objective"]
+# Set Python path to include the src directory
+ENV PYTHONPATH=/app/src
+
+CMD ["/usr/local/bin/python", "app/main.py"]

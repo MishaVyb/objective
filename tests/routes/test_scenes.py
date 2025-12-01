@@ -1,417 +1,654 @@
+import logging
 import uuid
-from pprint import pprint
+from asyncio import TaskGroup
 
 import pytest
-from fastapi import FastAPI
-from httpx import AsyncClient
-from starlette import status
-from tests.conftest import ClientsFixture, UsersFixture
-from tests.utils import verbose
+from dirty_equals import AnyThing, IsDict, IsStr
+from fastapi import HTTPException, status
 
-from objective.schemas.projects import ProjectCreateSchema
-from objective.schemas.scenes import (
-    FileCreateSchema,
-    SceneCreateSchema,
-    SceneUpdateSchema,
-)
+from app.client import ObjectiveClient
+from app.exceptions import NotFoundInstanceError
+from app.schemas import schemas
+from common.fastapi.exceptions.exceptions import NotFoundError
+from tests.conftest_data import ExcalidrawElement
+from tests.helpers import IsList, IsPartialSchema
+from tests.routes.test_projects import TEST_PROJECT
 
 pytestmark = [
     pytest.mark.anyio,
-    pytest.mark.usefixtures("session"),
 ]
 
 
-async def test_scene_crud(
-    users: UsersFixture,
-    client: AsyncClient,
-    scene_update_request_body: dict,
-    app: FastAPI,
+logger = logging.getLogger("conftest")
+
+
+async def test_scene_crud(client: ObjectiveClient, USER: schemas.User) -> None:
+    PROJECT = (await client.get_projects()).items[0]
+    ANOTHER_PROJECT = await client.create_project(TEST_PROJECT)
+
+    TEST_SCENE = schemas.SceneCreate(
+        name="test-scene",
+        project_id=PROJECT.id,
+    )
+
+    # [1] create simple
+    expected = IsPartialSchema(
+        name=TEST_SCENE.name,
+        created_by=IsPartialSchema(id=USER.id),
+        project=IsPartialSchema(
+            id=PROJECT.id,
+            created_by=IsPartialSchema(id=PROJECT.created_by.id),
+        ),
+    )
+    scene = await client.create_scene(TEST_SCENE)
+    assert scene == expected
+
+    # check be get one
+    scene = await client.get_scene(scene.id)
+    assert scene == expected
+
+    # check be get list
+    results = await client.get_scenes()
+    assert results.items == [
+        IsPartialSchema(),  # default
+        IsPartialSchema(),  # default
+        expected,
+    ]
+    results = await client.get_scenes(schemas.SceneFilters(ids=[scene.id]))
+    assert results.items == [expected]
+
+    # [1.2] create from '.objective' file
+    TEST_SCENE_FROM_FILE = schemas.SceneCreate(
+        name="test-scene",
+        elements=[
+            ExcalidrawElement(id="1", file_id="file_1", extra_field_value="value"),
+            ExcalidrawElement(id="2", file_id="file_2", extra_field_value="value"),
+        ],
+        app_state=schemas.AppState(extra_field_value="value"),
+        files=[
+            # !!! user's images, not scene's renders
+            schemas.FileCreate(id="file_1", data="data_1", type="image/png"),
+            schemas.FileCreate(id="file_2", data="data_2", type="image/png"),
+        ],
+        project_id=PROJECT.id,
+    )
+    expected = IsPartialSchema(
+        name=TEST_SCENE_FROM_FILE.name,
+        elements=[
+            IsPartialSchema(id="1", extra_field_value="value"),
+            IsPartialSchema(id="2", extra_field_value="value"),
+        ],
+        app_state=IsPartialSchema(extra_field_value="value"),
+        project=IsPartialSchema(id=PROJECT.id),
+        files=[],  # !!! empty, because scene renders have not been created yet
+    )
+
+    # getting scene by direct request
+    scene = await client.create_scene(TEST_SCENE_FROM_FILE)
+    assert scene == expected
+    scene = await client.get_scene(scene.id)
+    assert scene == expected
+
+    # getting scene from project request
+    project = (await client.get_projects()).items[0]
+    assert project.scenes[-1] == IsPartialSchema(
+        created_by=IsPartialSchema(id=USER.id),
+        name=TEST_SCENE_FROM_FILE.name,
+        app_state=IsPartialSchema(extra_field_value="value"),
+        type=AnyThing,
+        version=AnyThing,
+        source=AnyThing,
+    )
+
+    # getting files by separate requests
+    result = [
+        await client.get_file("file_1"),
+        await client.get_file("file_2"),
+    ]
+    expected = [
+        IsPartialSchema(id="file_1", data="data_1"),
+        IsPartialSchema(id="file_2", data="data_2"),
+    ]
+    assert result == expected
+
+    # [2] update partial
+    expected = IsPartialSchema(name="upd")
+    payload = schemas.SceneUpdate(name="upd")
+    assert await client.update_scene(scene.id, payload) == expected
+    assert await client.get_scene(scene.id) == expected
+
+    # [2] update full
+    payload = schemas.SceneUpdate(
+        name="upd-full",
+        app_state=schemas.AppState(new_key="new_value"),
+        project_id=ANOTHER_PROJECT.id,
+    )
+    expected = IsPartialSchema(
+        name="upd-full",
+        # moved to another project:
+        project=IsPartialSchema(id=ANOTHER_PROJECT.id),
+        # AppState was fully replaced:
+        app_state=IsDict(new_key="new_value"),
+    )
+    assert await client.update_scene(scene.id, payload) == expected
+    assert await client.get_scene(scene.id) == expected
+    assert (await client.get_scene(scene.id)).elements == [
+        # elements was not updated:
+        IsPartialSchema(id="1", extra_field_value="value"),
+        IsPartialSchema(id="2", extra_field_value="value"),
+    ]
+
+    # [3] delete
+    result = await client.delete_scene(scene.id)
+    assert result == IsPartialSchema(name="upd-full", is_deleted=True)
+
+    # [4] recover
+    result = await client.update_scene(scene.id, schemas.SceneUpdate(is_deleted=False))
+    assert result == IsPartialSchema(name="upd-full", is_deleted=False)
+
+
+async def test_scene_copy(
+    CLIENT_A: ObjectiveClient,
+    CLIENT_B: ObjectiveClient,
 ) -> None:
-    default_scenes_amount = len(app.state.initial_scenes)
-    user = users.user
-    another_user = users.another_user
-    project_id = user.projects[0].id
-    another_project_id = another_user.projects[0].id
+    PROJECT = (await CLIENT_B.get_projects()).items[0]
+    SCENE = (await CLIENT_B.get_scenes()).items[0]
+    ANOTHER_PROJECT = await CLIENT_B.create_project(TEST_PROJECT)
+    ANOTHER_USER_PROJECT = (await CLIENT_A.get_projects()).items[0]
+    ANOTHER_USER_SCENE = (await CLIENT_A.get_scenes()).items[0]
 
-    # [1] create
-    response = await client.post(
-        "/api/scenes",
-        content=SceneCreateSchema(
-            name="test-scene",
-            project_id=project_id,
-        ).model_dump_json(),
+    # [1] copy
+    payload = schemas.SceneCopy(name="copy")
+    result = await CLIENT_B.copy_scene(SCENE.id, payload)
+    assert result.id != SCENE.id
+    assert result == IsPartialSchema(
+        payload,
+        project=IsPartialSchema(id=PROJECT.id),
+        elements=IsList(length=(1, ...)),
     )
-    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
-    json = response.json()
-    pprint(json)
-    scene_id = json["id"]
 
-    # [2] read
-    response = await client.get("/api/scenes")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()[-1]
-
-    assert scene["name"] == "test-scene"
-    assert scene["appState"] == {}
-    assert scene["elements"] == []
-
-    # [2.1] read by id
-    response = await client.get(f"/api/scenes/{scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()
-
-    assert scene["name"] == "test-scene"
-    assert scene["appState"] == {}
-    assert scene["elements"] == []
-
-    # [2.2] read from project
-    response = await client.get(f"/api/projects/{project_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-
-    json = response.json()
-    assert len(json["scenes"]) == default_scenes_amount + 1
-    scene = json["scenes"][-1]
-
-    assert scene["name"] == "test-scene"
-    assert "appState" not in scene
-    assert "elements" not in scene
-
-    # [3] update simple
-    response = await client.patch(
-        f"/api/scenes/{scene_id}",
-        json=dict(SceneUpdateSchema(name="new-name")),
+    # [2] copy and move
+    payload = schemas.SceneCopy(name="copy", project_id=ANOTHER_PROJECT.id)
+    result = await CLIENT_B.copy_scene(SCENE.id, payload)
+    assert result.id != SCENE.id
+    assert result == IsPartialSchema(
+        name=payload.name,
+        project=IsPartialSchema(id=ANOTHER_PROJECT.id),
+        elements=IsList(length=(1, ...)),
     )
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    pprint(json)
 
-    assert json["name"] == "new-name"
-
-    # [3.1] update full
-    json = json | scene_update_request_body
-    response = await client.patch(f"/api/scenes/{scene_id}", json=json)
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-
-    assert json["elements"]
-    assert json["appState"]
-
-    # [3.3] update partial
-    data = {"elements": [{"type": "some-element-type"}]}
-    response = await client.patch(
-        f"/api/scenes/{scene_id}",
-        json=data,
+    # [3] copy another User scene to self project
+    payload = schemas.SceneCopy(name="copy", project_id=PROJECT.id)
+    result = await CLIENT_B.copy_scene(ANOTHER_USER_SCENE.id, payload)
+    assert result.id != SCENE.id
+    assert result == IsPartialSchema(
+        name=payload.name,
+        project=IsPartialSchema(id=PROJECT.id),
+        elements=IsList(length=(1, ...)),
     )
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
 
-    response = await client.get(f"/api/scenes/{scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert json["name"] == "new-name"
-    assert json["appState"]
-    assert json["elements"] == [{"type": "some-element-type"}]
+    # files from copied scene are not copied itself (both scenes using the same files / db records)
+    initial_scene_file_ids = [
+        element.file_id for element in ANOTHER_USER_SCENE.elements if element.file_id
+    ]
+    copied_scene_file_ids = [
+        element.file_id for element in result.elements if element.file_id
+    ]
+    assert initial_scene_file_ids == copied_scene_file_ids
 
-    # [4] delete
-    response = await client.delete(f"/api/scenes/{scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    pprint(json)
-
-    # get without filters -- only not deleted
-    response = await client.get(f"/api/scenes")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert len(json) == default_scenes_amount  # only default
-
-    # get from projects
-    response = await client.get(f"/api/projects/{project_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert len(json["scenes"]) == default_scenes_amount + 1  # both: default and deleted
-
-    # get (with filter)
-    response = await client.get(f"/api/scenes", params={"is_deleted": True})
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert len(json) == 1  # only deleted
-    assert json[0]["name"] == "new-name"
-
-    # get another project scenes (with filter: project_id and no user)
-    response = await client.get(
-        f"/api/scenes",
-        params={"project_id": str(another_project_id), "user_id": ""},
-    )
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert json[0]["user_id"] == str(another_user.id)
-
-    # the same, but omit no user params
-    response = await client.get(
-        f"/api/scenes",
-        params={"project_id": str(another_project_id)},
-    )
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert json == []  # because filtering both project_id & current user by default
-
-    # get (with filter)
-    response = await client.get(f"/api/scenes", params={"is_deleted": False})
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    json = response.json()
-    assert len(json) == len(app.state.initial_scenes)  # only default
-    assert json[0]["name"] == app.state.initial_scenes[0].app_state["name"]
+    # scene files accessible even after copy
+    for file_id in copied_scene_file_ids:
+        res = await CLIENT_B.get_file(file_id)
+        assert res == IsPartialSchema(
+            data=IsStr(min_length=10),
+            #
+            # and files is created by initial user, who send those file for the first time
+            created_by_id=ANOTHER_USER_PROJECT.created_by_id,
+        )
 
 
-async def test_scene_404(clients: ClientsFixture):
-    response = await clients.user.get(f"/api/scenes/{uuid.uuid4()}")
-    assert response.status_code == status.HTTP_404_NOT_FOUND, verbose(response)
-
-
-async def test_scene_403(clients: ClientsFixture):
-    # someone else's scene id:
-    id = (await clients.another_user.get("/api/scenes")).json()[0]["id"]
-
-    # read
-    # TMP anyone has read access to anything
-    response = await clients.user.get(f"/api/scenes/{id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-
-    # update
-    response = await clients.user.patch(f"/api/scenes/{id}", json={"name": "name"})
-    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
-
-    # delete
-    response = await clients.user.delete(f"/api/scenes/{id}")
-    assert response.status_code == status.HTTP_403_FORBIDDEN, verbose(response)
-
-
-async def test_scene_401(clients: ClientsFixture):
-    response = await clients.no_auth.get(f"/api/scenes/{uuid.uuid4()}")
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED, verbose(response)
-
-
-# TODO test create scene add file read file delete file
-
-
-async def test_scene_crud_with_files(
-    users: UsersFixture,
-    clients: ClientsFixture,
+async def test_scene_elements_crud(
+    CLIENT: ObjectiveClient,
+    PROJECT: schemas.Project,
 ) -> None:
-    user = users.user
-    client = clients.user
-    project_id = user.projects[0].id
-
-    # [1] create scene
-    response = await client.post(
-        "/api/scenes",
-        content=SceneCreateSchema(
-            name="test-scene",
-            project_id=project_id,
-            app_state={"key": "value"},
-            elements=[{"type": "some-element-type"}],
-            files=[
-                FileCreateSchema(
-                    file_id="initial-file-id",
-                    type="mimeType",
-                    data="dataURL",
-                ),
-            ],
-        ).model_dump_json(),
+    TEST_SCENE_FULL = schemas.SceneCreate(
+        name="test-scene",
+        elements=[
+            ExcalidrawElement(id="element_1"),
+            ExcalidrawElement(id="element_2"),
+        ],
+        app_state=schemas.AppState(),
+        files=[],
+        project_id=PROJECT.id,
     )
-    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
-    scene = response.json()
-    scene_id = scene["id"]
+    SCENE = await CLIENT.create_scene(TEST_SCENE_FULL)
 
-    # read by id
-    response = await client.get(f"/api/scenes/{scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()
-
-    assert scene["user_id"] == str(user.id)
-    assert scene["name"] == "test-scene"
-    assert scene["appState"] == {"key": "value"}
-    assert scene["elements"] == [{"type": "some-element-type"}]
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
+    ########################################################################################
+    # [1] append new els
+    ########################################################################################
+    initial_scene_updated_at = SCENE.updated_at or SCENE.created_at
+    el_3 = ExcalidrawElement(id="element_3")
+    el_4 = ExcalidrawElement(id="element_4")
+    expected_els = [  # only previous elements which NEW for client
+        IsPartialSchema(id="element_1"),
+        IsPartialSchema(id="element_2"),
     ]
+    r = await CLIENT.reconcile_els(SCENE.id, [el_3, el_4])
+    assert r.items == expected_els
+    assert (st := r.next_sync_token)
 
-    # [2] create file
-    file_id = "new-file-id"
-    response = await client.post(
-        f"/api/scenes/{scene_id}/files",
-        json={"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
+    # request all elements from the beginning
+    expected_els = [
+        IsPartialSchema(id="element_1"),
+        IsPartialSchema(id="element_2"),
+        IsPartialSchema(id="element_3"),
+        IsPartialSchema(id="element_4"),
+    ]
+    r = await CLIENT.get_els(SCENE.id)
+    assert r.items == expected_els
+
+    # request elements after prev sync
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
+    assert r.items == []
+
+    scene = await CLIENT.get_scene(SCENE.id)
+    assert scene.updated_at
+    assert scene.updated_at > initial_scene_updated_at
+
+    ########################################################################################
+    # [2] update els
+    # - check merge updated depending on 'updated', NOT 'version'
+    ########################################################################################
+
+    el_4_updated_A = (
+        # this update A has higher 'version',
+        # but it would be omitted, because it has been made before next update B
+        el_4.model_copy()
+        .update(key="UPDATE_1_B")
+        .update(key="UPDATE_2_B")
+        .update(key="UPDATE_3_B")
     )
-    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
+    el_4_updated_B = el_4.model_copy().update(key="UPDATE_1_A")
 
-    # [2.1] create files twice -- OK (skip error silently)
-    response = await client.post(
-        f"/api/scenes/{scene_id}/files",
-        json={"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"},
+    el_3_updated_C = el_3.model_copy().update(key="UPDATE_1_C")
+    el_4_updated_C = el_4.model_copy().update(key="UPDATE_1_C")
+
+    r = await CLIENT.reconcile_els(SCENE.id, [el_4_updated_B], sync_token=st)
+    assert r.items == []
+
+    # check el update has been applied
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
+    assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
+
+    # [2.2] send the same update again
+    # update would be ignored because of the same 'version_nonce'
+    el_4_updated_B.key = "NOT_PROPER_UPDATE_VALUE"
+    r = await CLIENT.reconcile_els(SCENE.id, [el_4_updated_B], sync_token=st)
+    assert r.items == []
+
+    # check update has NOT been taken
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
+    assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
+
+    # [2.3] send update A for the same element that was made earlier than update B
+    r = await CLIENT.reconcile_els(SCENE.id, [el_4_updated_A], sync_token=st)
+    assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
+
+    # check update has NOT been taken
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
+    assert r.items == [IsPartialSchema(id="element_4", key="UPDATE_1_A")]
+
+    # [2.3] send update C -- would be taken fully
+    r = await CLIENT.reconcile_els(
+        SCENE.id,
+        [el_3_updated_C, el_4_updated_C],
+        sync_token=st,
     )
-    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
-    file = response.json()
-    assert file == {"id": "new-file-id", "mimeType": "mimeType"}
+    assert r.items == []
 
-    # [3] read at scene
-    response = await client.get(f"/api/scenes/{scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()
-
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+    # check el update has been applied
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
+    assert r.items == [
+        IsPartialSchema(id="element_3", key="UPDATE_1_C"),
+        IsPartialSchema(id="element_4", key="UPDATE_1_C"),
     ]
 
-    # [3.1] read directly
-    response = await client.get(f"/api/scenes/{scene_id}/files/{file_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    file = response.json()
+    ########################################################################################
+    # [3] update & create
+    ########################################################################################
 
-    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
+    el_4_updated_D = el_4.model_copy().update(key="UPDATE_1_D")
+    el_5 = ExcalidrawElement(id="element_5")
+    r = await CLIENT.reconcile_els(SCENE.id, [el_4_updated_D, el_5], sync_token=st)
+    assert r.items == [
+        IsPartialSchema(id="element_3", key="UPDATE_1_C"),  # from prev update request
+    ]
 
-    ##################################################
-    # [4] copy scene to new project
-
-    # create new project
-    response = await client.post(
-        "/api/projects",
-        json=dict(ProjectCreateSchema(name="test-project")),
+    # check el update has been applied
+    r = await CLIENT.get_els(SCENE.id, sync_token=st)
+    assert r.items == IsList(
+        IsPartialSchema(id="element_3", key="UPDATE_1_C"),
+        IsPartialSchema(id="element_4", key="UPDATE_1_D"),
+        IsPartialSchema(id="element_5"),
+        check_order=False,
     )
-    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
-    project_id = response.json()["id"]
 
-    # copy scene (with new name)
-    response = await client.post(
-        f"/api/scenes/{scene_id}/copy",
-        json=SceneCreateSchema(
-            project_id=project_id,
-            name="copied",
-        ).model_dump(mode="json", exclude_unset=True),
+
+async def test_scene_elements_next_sync_token_simple(
+    CLIENT_A: ObjectiveClient,
+    SCENE: schemas.SceneExtended,
+) -> None:
+    """
+    Next sync token filters against **database** '_updated' field (not client).
+
+    Expecting elements to sync from server, even if it was created EARLIER than last
+    client request, but it was stored at db AFTER that last sync request.
+    """
+    el_6 = ExcalidrawElement(id="element_6")
+
+    r = await CLIENT_A.reconcile_els(SCENE.id)
+    assert (sync_token := r.next_sync_token)
+
+    # another client append el 6
+    await CLIENT_A.reconcile_els(SCENE.id, [el_6])
+
+    # re-fetch from prev sync_token
+    r = await CLIENT_A.reconcile_els(SCENE.id, sync_token=sync_token)
+    assert r.items == [
+        IsPartialSchema(id="element_6"),
+    ]
+
+
+async def test_scene_elements_next_sync_token_lock_scene(
+    CLIENT: ObjectiveClient,
+    SCENE: schemas.SceneExtended,
+) -> None:
+    """
+    Updates for one scene happened one after another.
+    """
+    el_1 = ExcalidrawElement(id="element_1")
+    el_2 = ExcalidrawElement(id="element_2")
+
+    async with TaskGroup() as group:
+        coro1 = CLIENT.reconcile_els(SCENE.id, [el_1])
+        coro2 = CLIENT.reconcile_els(SCENE.id, [el_2])
+        t1 = group.create_task(coro1)
+        t2 = group.create_task(coro2)
+
+    res_1 = t1.result()
+    res_2 = t2.result()
+
+    # res_2 already has updates 1 because it has been wait for scene would be released
+    # (because of Lock)
+    assert res_1.items == []
+    assert res_2.items == [IsPartialSchema(el_1)]
+
+    # later res_1 sync token could be used to get update 2
+    result = await CLIENT.reconcile_els(SCENE.id, sync_token=res_1.next_sync_token)
+    assert result.items == [IsPartialSchema(el_2)]
+
+    result = await CLIENT.reconcile_els(SCENE.id, sync_token=res_2.next_sync_token)
+    assert result.items == []
+
+
+async def test_scene_elements_next_sync_token_no_lock_scene(
+    CLIENT: ObjectiveClient,
+    SCENE: schemas.SceneExtended,
+    SCENE_2: schemas.SceneExtended,
+) -> None:
+    """
+    Updates for different scenes happened simultaneity.
+    """
+    el = ExcalidrawElement(id="element")
+
+    async with TaskGroup() as group:
+        coro1 = CLIENT.reconcile_els(SCENE.id, [el])
+        coro2 = CLIENT.reconcile_els(SCENE_2.id, [el])
+        t1 = group.create_task(coro1)
+        t2 = group.create_task(coro2)
+
+    res_1 = t1.result()
+    res_2 = t2.result()
+    ...
+
+
+async def test_scene_elements_next_sync_token_no_lock_for_get_request(
+    CLIENT: ObjectiveClient,
+    SCENE: schemas.SceneExtended,
+) -> None:
+    """
+    Update/Read for one scene happened simultaneously. No lock.
+    """
+    el = ExcalidrawElement(id="element")
+    async with TaskGroup() as group:
+        coro1 = CLIENT.reconcile_els(SCENE.id, [el])
+        coro2 = CLIENT.get_els(SCENE.id)
+        t1 = group.create_task(coro1)
+        t2 = group.create_task(coro2)
+
+    upd_res = t1.result()
+    read_res = t2.result()
+
+    assert upd_res.items == []
+    assert read_res.items == []
+
+    # later read sync token could be used to get fresh el (other request result)
+    read_res = await CLIENT.get_els(SCENE.id, sync_token=read_res.next_sync_token)
+    assert read_res.items == [IsPartialSchema(el)]
+
+    # after that no fresh elements to get
+    read_res = await CLIENT.get_els(SCENE.id, sync_token=read_res.next_sync_token)
+    assert read_res.items == []
+
+
+async def test_files_crud(client: ObjectiveClient) -> None:
+    """
+    Files:
+     - files could be created via Scene create that tested above
+     (on scene copy files are not created, already existing files are used)
+     - and files could be created directly
+    """
+    PROJECT = (await client.get_projects()).items[0]
+    SCENE = (await client.get_scenes()).items[0]
+
+    payload = schemas.FileCreate(
+        id="file_1",
+        data="data_1",
+        type="image/png",
+        kind=schemas.FileKind.THUMBNAIL,
     )
-    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
-    scene = response.json()
+    assert await client.create_file(payload) == IsPartialSchema(id="file_1")
+    assert await client.get_file("file_1") == IsPartialSchema(payload)
 
-    assert scene["id"] != scene_id  # new scene id
-
-    assert scene["user_id"] == str(user.id)
-    assert scene["name"] == "copied"
-    # NOTE: the same file ids, but it's another record in database as it stored under ../scene_id/file_id
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+    # associate file with scene
+    scene = await client.update_scene(SCENE.id, schemas.SceneUpdate(files=["file_1"]))
+    assert scene.files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
     ]
 
-    copied_scene_id = scene["id"]
-
-    # read from projects
-    response = await client.get(f"/api/projects/{project_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()["scenes"][-1]
-
-    assert scene["name"] == "copied"
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
-    ]
-
-    # read by id
-    response = await client.get(f"/api/scenes/{copied_scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()
-
-    assert scene["name"] == "copied"
-    assert scene["appState"] == {"key": "value"}  # the same app state
-    assert scene["elements"] == [{"type": "some-element-type"}]  # the same elements
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
-    ]
-
-    # check file also copied
-    response = await client.get(f"/api/scenes/{copied_scene_id}/files/{file_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    file = response.json()
-    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
-
-    ##################################################
-    # [5] copy scene to ANOTHER user's project
-
-    another_client = clients.another_user
-    another_user = users.another_user
-    project_id = another_user.projects[0].id
-
-    # copy scene (with new name)
-    response = await another_client.post(
-        f"/api/scenes/{scene_id}/copy",
-        json=SceneCreateSchema(
-            project_id=project_id,
-            name="copied-to-another-user",
-        ).model_dump(mode="json", exclude_unset=True),
+    # create another file
+    payload = schemas.FileCreate(
+        id="file_2",
+        data="data_2",
+        type="image/png",
+        kind=schemas.FileKind.THUMBNAIL,
     )
-    assert response.status_code == status.HTTP_201_CREATED, verbose(response)
-    scene = response.json()
+    assert await client.create_file(payload) == IsPartialSchema(id="file_2")
+    assert await client.get_file("file_2") == IsPartialSchema(payload)
 
-    assert scene["id"] != scene_id  # new scene id
-
-    assert scene["user_id"] == str(another_user.id)
-    assert scene["name"] == "copied-to-another-user"
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
-    ]
-
-    copied_scene_id = scene["id"]
-
-    # read from projects
-    response = await another_client.get(f"/api/projects/{project_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()["scenes"][-1]
-
-    assert scene["user_id"] == str(another_user.id)
-    assert scene["name"] == "copied-to-another-user"
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
-    ]
-
-    # read by id
-    response = await another_client.get(f"/api/scenes/{copied_scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()
-
-    assert scene["user_id"] == str(another_user.id)
-    assert scene["name"] == "copied-to-another-user"
-    assert scene["appState"] == {"key": "value"}  # the same app state
-    assert scene["elements"] == [{"type": "some-element-type"}]  # the same elements
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
-    ]
-
-    # check file also copied
-    response = await another_client.get(
-        f"/api/scenes/{copied_scene_id}/files/{file_id}",
+    # associate file with scene again
+    scene = await client.update_scene(
+        SCENE.id,
+        schemas.SceneUpdate(files=["file_1", "file_2"]),
     )
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    file = response.json()
-    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
-
-    ##################################################
-    # [6] final check: original scene files was not affected (!)
-
-    response = await client.get(f"/api/scenes/{scene_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    scene = response.json()
-
-    assert scene["user_id"] == str(user.id)
-    assert scene["name"] == "test-scene"
-    assert scene["files"] == [
-        {"id": "initial-file-id", "mimeType": "mimeType"},
-        {"id": "new-file-id", "mimeType": "mimeType"},
+    assert scene.files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+        IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
     ]
 
-    # check get original file
-    response = await client.get(f"/api/scenes/{scene_id}/files/{file_id}")
-    assert response.status_code == status.HTTP_200_OK, verbose(response)
-    file = response.json()
-    assert file == {"id": "new-file-id", "mimeType": "mimeType", "dataURL": "dataURL"}
+    # all files (simplified) accessible through projects
+    project = (await client.get_projects()).items[0]
+    assert project.scenes[0].files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+        IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
+    ]
+
+    # create the same file twice, but with another kind
+    # (for example user upload thumbnail image to the canvas)
+    payload = payload.model_remake(kind=schemas.FileKind.IMAGE)
+    assert await client.create_file(payload) == IsPartialSchema(
+        id="file_2",
+        kind=schemas.FileKind.THUMBNAIL,  # !!! it's still thumbnail
+    )
+
+    # copied scene has the same files association
+    copied_scene = await client.copy_scene(SCENE.id, schemas.SceneCopy())
+    assert copied_scene.files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+        IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
+    ]
+
+    assert (await client.get_scene(copied_scene.id)).files == [
+        IsPartialSchema(id="file_1", kind=schemas.FileKind.THUMBNAIL),
+        IsPartialSchema(id="file_2", kind=schemas.FileKind.THUMBNAIL),
+    ]
+
+    # raises 404
+    with pytest.raises(NotFoundError):
+        await client.update_scene(
+            SCENE.id,
+            schemas.SceneUpdate(files=["invalid_file_id"]),
+        )
+
+    # make changes to scene.elements, expecting scene.files invalidation
+    await client.reconcile_els(
+        SCENE.id,
+        schemas.SyncElementsRequest(items=[ExcalidrawElement(id="element_1")]),
+    )
+    project = (await client.get_projects()).items[0]
+    assert project.scenes[0].files == []
+
+
+async def test_files_crud_race_condition(client: ObjectiveClient) -> None:
+    PROJECT = (await client.get_projects()).items[0]
+    SCENE = (await client.get_scenes()).items[0]
+
+    payload = schemas.FileCreate(
+        id="file_1",
+        data="data_1",
+        type="image/png",
+        kind=schemas.FileKind.THUMBNAIL,
+    )
+    async with TaskGroup() as group:
+        coro1 = client.create_file(payload)
+        coro2 = client.create_file(payload)
+        t1 = group.create_task(coro1)
+        t2 = group.create_task(coro2)
+
+    res_1 = t1.result()
+    res_2 = t2.result()
+    assert res_1.id == "file_1"
+    assert res_2.id == "file_1"
+
+    res = await client.get_file("file_1")
+    assert res.id == "file_1"
+
+    async with TaskGroup() as group:
+        p = schemas.SceneUpdate(files=["file_1"])
+        _coro1 = client.update_scene(SCENE.id, p)
+        _coro2 = client.update_scene(SCENE.id, p)
+        _t1 = group.create_task(_coro1)
+        _t2 = group.create_task(_coro2)
+
+    _res_1 = _t1.result()
+    _res_2 = _t2.result()
+    assert _res_1.files == [IsPartialSchema(id="file_1")]
+    assert _res_2.files == [IsPartialSchema(id="file_1")]
+
+    res = await client.get_scene(SCENE.id)
+    assert res.files == [IsPartialSchema(id="file_1")]
+
+
+async def test_scene_filters_is_deleted(client: ObjectiveClient) -> None:
+    # arrange:
+    PROJECT = (await client.get_projects()).items[0]
+    await client.delete_scene(PROJECT.scenes[0].id)
+
+    # act:
+    results = await client.get_scenes()
+    assert results.items == [
+        IsPartialSchema(is_deleted=True),
+        IsPartialSchema(is_deleted=False),
+    ]
+    results = await client.get_scenes(schemas.SceneFilters(is_deleted=False))
+    assert results.items == [
+        # IsPartialSchema(is_deleted=True),
+        IsPartialSchema(is_deleted=False),
+    ]
+    results = await client.get_scenes(schemas.SceneFilters(is_deleted=True))
+    assert results.items == [
+        IsPartialSchema(is_deleted=True),
+        # IsPartialSchema(is_deleted=False),
+    ]
+
+    # project has always both DELETED and NOT DELETED scenes
+    result = await client.get_project(PROJECT.id)
+    assert result.scenes == [
+        IsPartialSchema(is_deleted=True),
+        IsPartialSchema(is_deleted=False),
+    ]
+    result = (
+        await client.get_projects(schemas.ProjectFilters(is_deleted=False))
+    ).items[0]
+    assert result.scenes == [
+        IsPartialSchema(is_deleted=True),
+        IsPartialSchema(is_deleted=False),
+    ]
+
+
+async def test_scene_filters_project_id(
+    client: ObjectiveClient,
+    *,
+    USER_A: schemas.User,
+    CLIENT_A: ObjectiveClient,
+    USER_B: schemas.User,
+    CLIENT_B: ObjectiveClient,
+) -> None:
+    PROJECT_A = (await CLIENT_A.get_projects()).items[0]
+    PROJECT_B = (await CLIENT_B.get_projects()).items[0]
+
+    results = await CLIENT_A.get_scenes(schemas.SceneFilters(created_by_id=USER_B.id))
+    assert results.items == [
+        IsPartialSchema(created_by_id=USER_B.id),
+        IsPartialSchema(created_by_id=USER_B.id),
+    ]
+    results = await CLIENT_A.get_scenes(schemas.SceneFilters(created_by_id="*"))
+    assert results.items == [
+        IsPartialSchema(created_by_id=USER_A.id),
+        IsPartialSchema(created_by_id=USER_A.id),
+        IsPartialSchema(created_by_id=USER_B.id),
+        IsPartialSchema(created_by_id=USER_B.id),
+    ]
+
+    # per project
+    results = await CLIENT_A.get_scenes(
+        schemas.SceneFilters(created_by_id="*", project_id=PROJECT_B.id),
+    )
+    assert results.items == [
+        IsPartialSchema(created_by_id=USER_B.id),
+        IsPartialSchema(created_by_id=USER_B.id),
+    ]
+    # per project, created by current_user by default
+    results = await CLIENT_A.get_scenes(schemas.SceneFilters(project_id=PROJECT_B.id))
+    assert results.items == []  # no results
+
+
+async def test_scene_401(setup_clients: dict[str | int, ObjectiveClient]):
+    with pytest.raises(HTTPException) as exc:
+        await setup_clients["unauthorized"].get_scene(uuid.uuid4())
+    assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+async def test_scene_404(client: ObjectiveClient):
+    with pytest.raises(NotFoundInstanceError):
+        await client.get_project(uuid.uuid4())

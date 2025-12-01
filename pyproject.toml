@@ -4,11 +4,11 @@ version = "0.1.0"
 description = ""
 authors = []
 maintainers = []
-readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
-fastapi = "^0.100.0"
+fastapi = "^0.108.0"
 uvicorn = { version = "^0.22.0", extras = ["standard"] }
 fastapi-users = "^12.1.2"
 httpx-oauth = "^0.10.2"
@@ -21,11 +21,21 @@ alembic = "^1.11.1"
 asyncpg = { version = "^0.28.0", extras = ["sa"] }
 aiofiles = "^23.1.0"
 httptools = "^0.6.0"
-sentry-sdk = {extras = ["fastapi"], version = "^1.40.0"}
+sentry-sdk = { extras = ["fastapi"], version = "^1.40.0" }
 pytest-mock = "^3.14.0"
+setuptools = "^74.0.0"
+yarl = "^1.20.1"
 
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
+asgi-lifespan = "^2.1.0"
+mypy = "^1.5.1"
+schemathesis = "^3.20.2"
+pyright = "^1.1.344"
+dirty-equals = "^0.8.0"
+debugpy = "^1.8.5"
+aiosqlite = "^0.20.0"
+pytest-xdist = "^3.6.1"
 pytest = "^7.2.1"
 flake8 = "~4.0.1"
 isort = "^5.11.4"
@@ -37,62 +47,74 @@ anyio = "^3.6.2"
 pytest-env = "^0.8.1"
 httpx = "^0.23.3"
 
-[tool.poetry.group.dev.dependencies]
-asgi-lifespan = "^2.1.0"
-mypy = "^1.5.1"
-schemathesis = "^3.20.2"
-pyright = "^1.1.344"
-
 [tool.isort]
 profile = "black"
 multi_line_output = 3
-src_paths = ["objective"]
+
+
+[tool.pydantic-mypy]
+# https://docs.pydantic.dev/latest/integrations/mypy/#configuring-the-plugin
+init_forbid_extra = false
+init_typed = false
+warn_required_dynamic_aliases = true
 
 
 [tool.mypy]
-python_version = '3.11'
-plugins = 'pydantic.mypy'
-strict_optional = false
+ignore_errors = false
+explicit_package_bases = true
 
-[tool.pydantic-mypy]
-init_forbid_extra = true
-init_typed = true
-warn_required_dynamic_aliases = true
+python_version = "3.11"
+plugins = "common.mypy"
+
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+ignore_missing_imports = true
+follow_imports = "silent"
+implicit_optional = false
+allow_redefinition = true
+check_untyped_defs = true
+strict_equality = true
+warn_unreachable = true
+
+enable_error_code = [
+    "redundant-expr",
+    "possibly-undefined",
+    "truthy-bool",
+    "truthy-iterable",
+    "unused-awaitable",
+]
+disable_error_code = [
+    #https://mypy.readthedocs.io/en/stable/error_code_list.html#require-annotation-if-variable-type-is-unclear-var-annotated
+    "var-annotated", # allows: foo = [], bar = {}
+    "override",
+    "assignment",
+    "misc",
+    "truthy-bool",   # allows for optional pydantic fields declared via ModelConstructor
+]
+
+[[tool.mypy.overrides]]
+module = "common.*"
+ignore_errors = true
+
 
 [tool.pytest.ini_options]
-addopts = "--failed-first --durations=10"
+addopts = "--failed-first --durations=10 --disable-warnings --show-capture=no"
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning",
-    "ignore:.*unclosed.*:ResourceWarning",
-]
-env = ["PYTEST_USERS_SECRET=1234567890"]
 
-[tool.fastapi-template.options]
-project_name = "objective"
-api_type = "rest"
-enable_redis = "None"
-enable_rmq = "None"
-ci_type = "github"
-enable_migrations = "True"
-enable_taskiq = "None"
-enable_kube = "None"
-kube_name = "objective"
-enable_routers = "True"
-enable_kafka = "None"
-enable_loguru = "None"
-traefik_labels = "None"
-add_dummy = "True"
-orm = "sqlalchemy"
-self_hosted_swagger = "True"
-prometheus_enabled = "None"
-sentry_enabled = "None"
-otlp_enabled = "None"
-pydanticv1 = "None"
-gunicorn = "None"
-add_users = "True"
-cookie_auth = "None"
-jwt_auth = "True"
+    # triggers sometime because of many workers pytest-dist session run:
+    "ignore::ResourceWarning",
+    "ignore::pluggy.PluggyTeardownRaisedWarning",
+]
+
+[tool.autoflake]
+in-place = true
+remove-all-unused-imports = true
+remove-duplicate-keys = true
+ignore-init-module-imports = true
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
